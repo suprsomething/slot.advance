@@ -255,7 +255,7 @@ The slot.advance **boot logo** appears from the second power-on: on the first st
 
 ## Going back
 
-All of a download's files are in its `System` folder: the slot.advance program (`System/slot`), the two emulator cores, the start-up and crash scripts, the boot logo and the licences. Its other folders are empty. Your games, saves, states, favourites and settings are never in `System`, so going back doesn't touch them. They work with earlier releases back to [0.3.0](https://github.com/suprsomething/slot.advance/releases/tag/advance-v3), the last one before hardware sleep.
+All of a download's files are in its `System` folder: the slot.advance program (`System/slot`), the two emulator cores, the start-up and crash scripts, the boot logo and the licences. Its other folders are empty. Your games, saves, states, favourites and settings are never in `System`, so following the steps below leaves those files untouched. Compatibility is a separate question: older releases haven't been tested with files written by newer ones, so an earlier version may not understand every setting or file a later one created. Copying `Config`, `Saves` and `States` to your computer first is a simple precaution.
 
 **Complete rollback (recommended).** This puts every program file back to the earlier release.
 
