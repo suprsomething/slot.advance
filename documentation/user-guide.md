@@ -17,8 +17,11 @@ New to slot.advance? Start with the [README](../README.md), which covers what it
 7. [Wi-Fi and link play](#wi-fi-and-link-play)
 8. [Battery](#battery)
 9. [Files on the games card](#files-on-the-games-card)
-10. [Troubleshooting](#troubleshooting)
-11. [Differences from slot](#differences-from-slot)
+10. [Going back](#going-back)
+11. [Troubleshooting](#troubleshooting)
+12. [Known limitations](#known-limitations)
+13. [Reporting a problem](#reporting-a-problem)
+14. [Differences from slot](#differences-from-slot)
 
 ---
 
@@ -31,6 +34,14 @@ The carousel shows your games as cartridges on a shelf. It has three categories:
 - **Favourites:** games you have starred. A gold star marks a favourite on the shelf.
 
 After a reboot, the carousel opens on **the game you played last**, in the category you started it from.
+
+<p align="center">
+<img src="../.github/resources/screenshots/advance/recents-unbound.png" width="48%" alt="The Recents shelf showing Pokémon Unbound, newest first">
+<img src="../.github/resources/screenshots/advance/favourites-unbound.png" width="48%" alt="The Favourites shelf showing Pokémon Unbound">
+<br><sub><b>Recents</b>, newest first (left), and <b>Favourites</b> (right)</sub>
+</p>
+
+<sub>Screenshots in this guide are rendered from slot.advance's own drawing code at the RG SP (2026)'s 720 x 480, with user-supplied Pokémon Unbound artwork and labels from the [starter pack](../artwork/gba-originals).</sub>
 
 | Button | What it does | |
 |---|---|---|
@@ -239,9 +250,15 @@ The slot.advance **boot logo** appears from the second power-on: on the first st
 
 ---
 
+## Going back
+
+To return to an earlier version, copy `System/slot` from an earlier download on the [releases page](https://github.com/suprsomething/slot.advance/releases) over `System/slot` on the games card, then power on. If you renamed the old `System/slot` to `slot.previous` when you upgraded, you can rename it back instead. Your saves and settings work with earlier releases back to [0.3.0](https://github.com/suprsomething/slot.advance/releases/tag/advance-v3), the last one before hardware sleep.
+
+---
+
 ## Troubleshooting
 
-**The screen stayed dark after I flicked the lid open and shut quickly.** Close the lid and open it again. The game carries on without losing progress. Rapid flicks can occasionally leave the device asleep with the lid open; normal opening is unaffected. See [Known limitations](../README.md#known-limitations).
+**The screen stayed dark after I flicked the lid open and shut quickly.** Close the lid and open it again. The game carries on without losing progress. Rapid flicks can occasionally leave the device asleep with the lid open; normal opening is unaffected. See [Known limitations](#known-limitations).
 
 **Wakes felt slower for one session.** If the lid was closed at almost exactly the moment Wi-Fi switched off, about 20 seconds after power-on, the stale Wi-Fi card may not have been removed that session. Sleep and wake still work normally, just without the speed-up. The next power-on fixes it. `slot.log` shows `stale wifi card discard FAILED`.
 
@@ -249,11 +266,29 @@ The slot.advance **boot logo** appears from the second power-on: on the first st
 
 **The link shortcut shows Link Off.** Wi-Fi is off. See [Wi-Fi and link play](#wi-fi-and-link-play).
 
-**I want to go back to an earlier version.** See [Going back](../README.md#going-back) in the README.
+**I want to go back to an earlier version.** See [Going back](#going-back).
 
-**slot.advance went back to the carousel by itself.** It probably crashed, and the RG SP (2026) started it again straight away. The game's battery save and suspend slot are as they were at the last automatic save, at most about a minute earlier, and your five save states are untouched. The details are kept in the `crash` folder on the games card; please [report it](../README.md#reporting-a-problem).
+**slot.advance went back to the carousel by itself.** It probably crashed, and the RG SP (2026) started it again straight away. The game's battery save and suspend slot are as they were at the last automatic save, at most about a minute earlier, and your five save states are untouched. The details are kept in the `crash` folder on the games card; please [report it](#reporting-a-problem).
 
-**Something else went wrong.** Don't power on again yet: `slot.log` and `slot.log.1` are replaced each time slot.advance starts. Copy them from the games card first, then follow [Reporting a problem](../README.md#reporting-a-problem).
+**Something else went wrong.** Don't power on again yet: `slot.log` and `slot.log.1` are replaced each time slot.advance starts. Copy them from the games card first, then follow [Reporting a problem](#reporting-a-problem).
+
+---
+
+## Known limitations
+
+- **Rapidly flicking the lid** closed and open can occasionally leave the screen dark with the lid open. Deliberate stress testing reproduced this in both 0.4.0 and 0.4.1. Normal wake behaviour is unaffected, and closing and reopening the lid restores the game without losing progress. See [Validation status](sleep-and-battery.md#validation-status).
+- **The faster wake can occasionally be missed for one session.** If the lid is closed at almost exactly the moment Wi-Fi switches off, about 20 seconds after power-on, the stale Wi-Fi card may not be removed. Sleep and wake still work normally; wakes in that session simply take as long as in 0.4.0, and the next power-on removes it as usual.
+- **Battery figures come from the battery gauge**, which reads in whole 1% steps. The results are based on a small number of individual runs. See [Methodology and uncertainty](sleep-and-battery.md#methodology-and-uncertainty).
+- **Link play needs `wifi=on`**. With it on, the radio stays powered.
+- **The sleep timer always ends with a shutdown**, even on the charger. The game is restored at the next power-on.
+
+---
+
+## Reporting a problem
+
+1. **Don't power on again yet.** `slot.log` and `slot.log.1` are replaced each time slot.advance starts, so the record of the problem is on the card only until the next start or two.
+2. Power off, take the games card (SD2) out and put it in your computer. Copy `slot.log` and `slot.log.1` from the top of the card somewhere safe. If there is a `crash` folder, copy `crash/cores.log` and the newest `crash/slot-….log` too.
+3. [Open an issue](https://github.com/suprsomething/slot.advance/issues/new/choose) and choose **Bug report**. Say which version you're on (the first line of `slot.log`), what you were doing and what you saw, then drag the log files into the issue. Leave out `crash/slot.core`: it is large, and only needed if asked for.
 
 ---
 

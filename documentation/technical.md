@@ -35,7 +35,7 @@ The carousel, cartridges, save states, link play and nearly everything else are 
 - **`crates/slot/src/app.rs`** saves the game when the lid closes, asks for each suspend and acts on the result (`doze`, `sleep_now`, `expire`).
 - **`crates/slot/src/device_app.rs`** is the device's main loop. It arms sleep at start-up and calls into the app when a suspend is due.
 
-slot.advance does not modify BaseOS. Its power settings are made at run time through standard kernel interfaces (sysfs and `/sys/power/state`), and none of them outlives the session: BaseOS restores the lid setting, the USB controllers and Wi-Fi at every boot. (The one thing slot.advance writes to the system card is its boot logo; see the README.)
+slot.advance does not modify BaseOS. Its power settings are made at run time through standard kernel interfaces (sysfs and `/sys/power/state`), and none of them outlives the session: BaseOS restores the lid setting, the USB controllers and Wi-Fi at every boot. (The one thing slot.advance writes to the system card is its boot logo; see the [User guide](user-guide.md#files-on-the-games-card).)
 
 ---
 
