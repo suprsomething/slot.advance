@@ -4,7 +4,7 @@ This guide explains how to use slot.advance on the **Anbernic RG SP (2026)**: th
 
 New to slot.advance? Start with the [README](../README.md), which covers what it is and [how to install it](../README.md#installing-and-updating). If you want to know how sleep works inside, see the [Technical reference](technical.md); for how it was tested, see [Sleep and battery: how it evolved and how it was measured](sleep-and-battery.md).
 
-**Reading the controls tables:** buttons side by side mean either one, and a `+` means both together. **New** marks what slot.advance adds or changes compared with [slot](https://github.com/BrandonKowalski/slot).
+**Reading the controls tables:** buttons side by side mean either one, and a `+` means both together. **New** marks what slot.advance adds or changes compared with [slot](https://github.com/BrandonKowalski/slot) 1.7.0.
 
 ## Contents
 
@@ -48,7 +48,7 @@ After a reboot, the carousel opens on **the game you played last**, in the categ
 | `Left` / `Right` | Move along the shelf | |
 | `Up` / `Down` | Skip to the next letter | |
 | `L2` / `R2` | Switch category: All, Recents, Favourites (empty ones are skipped) | **New** |
-| `Y` | Add or remove the game from Favourites | **New** |
+| `Y` | Add or remove the game from Favourites | |
 | `L1` / `R1` | Same as `L2` / `R2` (and steps through GB and GBC shelves if you have those games too) | |
 | Tap `A` | Resume where you left off | |
 | Hold `A` | Start the game fresh | |
@@ -86,6 +86,9 @@ Shader, colour correction and fast-forward changes made in game are saved **for 
 | `SELECT` + `Left` / `Right` | Blue light filter |
 | `VOL+` / `VOL-` | Volume |
 | `VOL+` + `VOL-`, or `SELECT` + a volume key | Mute |
+| Hold `POWER` for about a second | The power menu: **Restart** or **Power Off**. Your game is saved first. `Up` / `Down` to choose, `A` to confirm, `B` to close it. A shorter tap sleeps instead |
+
+`POWER` does nothing while the lid is shut, or for 3 seconds after waking, so the press that woke the RG SP (2026) can't also open the menu. The power menu isn't available during link play.
 
 ---
 
@@ -252,13 +255,24 @@ The slot.advance **boot logo** appears from the second power-on: on the first st
 
 ## Going back
 
-To return to an earlier version, copy `System/slot` from an earlier download on the [releases page](https://github.com/suprsomething/slot.advance/releases) over `System/slot` on the games card, then power on. If you renamed the old `System/slot` to `slot.previous` when you upgraded, you can rename it back instead. Your saves and settings work with earlier releases back to [0.3.0](https://github.com/suprsomething/slot.advance/releases/tag/advance-v3), the last one before hardware sleep.
+All of a download's files are in its `System` folder: the slot.advance program (`System/slot`), the two emulator cores, the start-up and crash scripts, the boot logo and the licences. Its other folders are empty. Your games, saves, states, favourites and settings are never in `System`, so going back doesn't touch them. They work with earlier releases back to [0.3.0](https://github.com/suprsomething/slot.advance/releases/tag/advance-v3), the last one before hardware sleep.
+
+**Complete rollback (recommended).** This puts every program file back to the earlier release.
+
+1. Download the earlier release from the [releases page](https://github.com/suprsomething/slot.advance/releases) and unzip it.
+2. Power off the RG SP (2026) and put the games card (SD2) in your computer.
+3. Open the download's `System` folder, select **everything inside it** and drag it into the `System` folder on the card. When asked, choose **Replace**.
+4. Eject the card, put it back, and power on.
+
+As when upgrading, only the contents of `System` need copying. On a Mac, don't drag the download's top-level folders (`Games`, `Saves`, `States` and so on) onto the card's folders of the same name: Finder's **Replace** would swap a whole folder for an empty one.
+
+**Program only.** Copying just `System/slot` from an earlier release over `System/slot` on the card, or renaming the `slot.previous` you kept when upgrading back to `slot`, changes the program but leaves the newer cores and scripts in place. That mixed install is fine for a quick comparison, but it isn't the release as it was tested: for example, 0.4.2 also changed the gpSP core and the crash-capture script. Use a complete rollback before reporting a problem, because the version on the About screen and in `slot.log` names only the program.
 
 ---
 
 ## Troubleshooting
 
-**The screen stayed dark after I flicked the lid open and shut quickly.** Close the lid and open it again. The game carries on without losing progress. Rapid flicks can occasionally leave the device asleep with the lid open; normal opening is unaffected. See [Known limitations](#known-limitations).
+**The screen stayed dark after I flicked the lid open and shut quickly.** Close the lid and open it again. The game carries on without losing progress. Rapid flicks can occasionally leave the device asleep with the lid open, most likely because the lid was still moving when it was read. Normal opening is unaffected.
 
 **Wakes felt slower for one session.** If the lid was closed at almost exactly the moment Wi-Fi switched off, about 20 seconds after power-on, the stale Wi-Fi card may not have been removed that session. Sleep and wake still work normally, just without the speed-up. The next power-on fixes it. `slot.log` shows `stale wifi card discard FAILED`.
 
@@ -276,8 +290,8 @@ To return to an earlier version, copy `System/slot` from an earlier download on 
 
 ## Known limitations
 
-- **Rapidly flicking the lid** closed and open can occasionally leave the screen dark with the lid open. Deliberate stress testing reproduced this in both 0.4.0 and 0.4.1. Normal wake behaviour is unaffected, and closing and reopening the lid restores the game without losing progress. See [Validation status](sleep-and-battery.md#validation-status).
-- **The faster wake can occasionally be missed for one session.** If the lid is closed at almost exactly the moment Wi-Fi switches off, about 20 seconds after power-on, the stale Wi-Fi card may not be removed. Sleep and wake still work normally; wakes in that session simply take as long as in 0.4.0, and the next power-on removes it as usual.
+- **Rapid lid flicks** can occasionally leave the screen dark with the lid open. Deliberate stress testing reproduced this in both 0.4.0 and 0.4.1; normal opening is unaffected, and no progress is lost. [How to recover](#troubleshooting) · [Validation status](sleep-and-battery.md#validation-status).
+- **The faster wake can be missed for one session** if the lid closes just as Wi-Fi switches off, about 20 seconds after power-on. Sleep and wake still work. [Details](#troubleshooting).
 - **Battery figures come from the battery gauge**, which reads in whole 1% steps. The results are based on a small number of individual runs. See [Methodology and uncertainty](sleep-and-battery.md#methodology-and-uncertainty).
 - **Link play needs `wifi=on`**. With it on, the radio stays powered.
 - **The sleep timer always ends with a shutdown**, even on the charger. The game is restored at the next power-on.
@@ -294,19 +308,26 @@ To return to an earlier version, copy `System/slot` from an earlier download on 
 
 ## Differences from slot
 
-| | slot | slot.advance |
+This compares slot.advance with **slot 1.7.0**, the latest upstream release (15 October 2026) when this was last checked on 20 October 2026. Changes on upstream's main branch since then aren't included.
+
+**Why choose slot.advance:** you play GBA games on an RG SP (2026) and want real hardware sleep: close the lid and the game waits in memory for hours, opening it carries straight on, and a timed shutdown keeps the game safe. **Why choose slot:** you want its themes, wallpapers and bezels, its in-game menu or run-ahead, or you have a different Anbernic handheld.
+
+| | slot 1.7.0 | slot.advance |
 |---|---|---|
-| Lid closed | Keeps running and drawing a black screen; powers off after 3 minutes | **Suspends to RAM**; opening the lid carries on; shuts down after the time set in **Settings > Sleep** |
+| Lid closed | Software standby: the screen goes dark but the system keeps running, and it powers off after 3 minutes | **Real hardware sleep** (suspend-to-RAM). Opening the lid carries on; it shuts down after the time set in **Settings > Sleep**, from 3 minutes to 8 hours |
 | Wi-Fi | On whenever BaseOS starts it | **Off** unless you need link play. See [Wi-Fi and link play](#wi-fi-and-link-play) |
-| Game titles | None | **Optional**, off by default. See [Game titles](#game-titles) |
-| Categories | One shelf per platform | **All, Recents and Favourites**, switched with L2 / R2 |
-| Favourites | None | **Y** stars a game; a gold star marks it on the shelf |
-| Recently played | None | The last **10** games started, newest first |
-| Manual save states | 10 per game | **5** per game, the oldest replaced by the newest |
-| Save-state switcher | Left / Right | **Up / Down** as well |
-| Deleting a state | Instant | **Asks first**: Y, then Y again |
-| GBA screen shader | Grid by default | **Off** by default (GBA is an exact 3x on a 720 x 480 screen, so it is already pixel perfect) |
-| Per-game settings | One setting for every game | **Each game remembers** its shader, colour correction, fast-forward speed and fast-forward sound |
-| After a reboot | First cart on the shelf | **The game you played last**, in the category you started it from |
-| About screen | A "back of the console" sticker | The **version, number of games, free space** on the games card and **battery** |
+| Unused USB host controllers | On | **Off** |
+| Save states | 10 per game; the switcher moves with Left / Right; `Y` deletes straight away | **5** per game; **Up / Down** as well; deleting **asks first** |
+| Per-game settings | Shader and colour correction are set for each platform (GBA, GB, GBC) and shared by all its games | **Each game remembers** its shader, colour correction, fast-forward speed and fast-forward sound |
+| GBA screen shader | Grid by default | **Off** by default (GBA is an exact 3x on the 720 x 480 screen, so it is already pixel perfect) |
+| Recents | Off until switched on in Settings | **On**, the last 10 games started |
+| Switching shelves | `L1` / `R1` | `L1` / `R1`, and **`L2` / `R2`** |
 | Low battery | Shuts down at 5% | A quiet **banner at 15% and 10%** first, then the same 5% shutdown |
+| About screen | A "back of the console" sticker | The **version, number of games, free space** on the games card and **battery** |
+| Devices | Several Anbernic handhelds | The **RG SP (2026) only** |
+
+**In both:** Favourites (`Y` stars a game onto its own shelf), a Recents shelf of the last 10 games, returning to where you were after a reboot (slot to the shelf and cart selected at power-off, slot.advance to the game you last played), and optional game titles taken from the file name without its tags. slot fades the title into the shelf name; slot.advance shows it above the selected cartridge. Both also share everything slot.advance inherited: the cartridge shelf, the save-state switcher, rewind, fast-forward, link play, the two emulators and the power menu.
+
+**Only in slot 1.7.0:** light and dark themes with bundled wallpapers and wallpaper tint, per-platform bezels, an in-game menu on a tap of `MENU`, one-frame run-ahead for GBA, held directions repeating in menus, and support for other Anbernic devices.
+
+**Where the shared features came from.** slot.advance was forked from slot on 9 October 2026, shortly after 1.5.0, so everything in slot up to then is Brandon T. Kowalski's work and that of slot's contributors. slot.advance's Recents is adapted from ciscosweater's community fork, slots, whose favourites tab also inspired slot.advance's Favourites. slot.advance's game titles and reopening on the last game were written for it. slot later added its own Favourites, Recents, remembered shelf and Game Titles in 1.7.0, built separately.

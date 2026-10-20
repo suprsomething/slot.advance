@@ -48,17 +48,19 @@ slot.advance is a fork of **[slot](https://github.com/BrandonKowalski/slot)** by
 
 Close the lid and your game is saved and held in memory. Open it to carry on. If the sleep time runs out first, it shuts down cleanly and restores the game at the next power-on. Choose the time in **Settings > Sleep**, from 3 minutes to 8 hours.
 
+In three extended sleeps with Wi-Fi off (the default), hardware sleep used about 2 to 3.2% of the battery an hour, against roughly 7% an hour for an earlier software-standby test build held in standby for two hours. Ordinary 0.3.0 shuts down after three minutes.
+
 <p align="center">
 <img src=".github/resources/battery/battery-drain-hourly.svg" width="100%" alt="Battery used per hour with the lid closed, as 1% blocks from observed battery-gauge drops: about 7% for 0.3.0 (semi-stock) software standby, a modified test build held in standby (61% to 47% in 2 hours), and about 2 to 3.2% for 0.4.x hardware sleep from three extended sleeps (98% to 82% in 8 hours on 0.4.0-beta.3, 94% to 74% in 7 hours 46 minutes on 0.4.0, 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1)">
 </p>
 
-<sub>Battery used per hour with the lid closed, as observed on the battery gauge over a small number of runs, not guaranteed battery life. The 0.4.x hardware-sleep figures are with Wi-Fi off, the default. [How it was measured](documentation/sleep-and-battery.md).</sub>
+<sub>Observed battery-gauge readings over a small number of runs, not guaranteed battery life. [How it was measured, and how far the figures can be trusted](documentation/sleep-and-battery.md).</sub>
 
 ---
 
 ## Installing and updating
 
-The download is a complete games-card layout for the RG SP (2026). It holds no games, saves or settings, so it never overwrites yours. slot.advance runs on the same system card (SD1) as slot; if your RG SP (2026) already runs slot, skip to **Upgrading**.
+The download is a complete games-card layout for the RG SP (2026). It holds no games, saves or settings, and following the upgrade instructions below preserves your existing ones. slot.advance runs on the same system card (SD1) as slot; if your RG SP (2026) already runs slot, skip to **Upgrading**.
 
 ### New install
 
@@ -124,7 +126,7 @@ This build: **0.4.2** · [All releases](https://github.com/suprsomething/slot.ad
 - **[slot](https://github.com/BrandonKowalski/slot)** by Brandon T. Kowalski: the frontend this fork is built on. The cart sounds are recordings of his childhood Game Boy.
 - **slots** by **[ciscosweater](https://github.com/ciscosweater)**: the Recents category is adapted from this community fork of slot, and its favourites tab inspired ours.
 - **[mGBA](https://mgba.io)** by endrift and **[gpSP](https://github.com/libretro/gpsp)** through [libretro](https://www.libretro.com): the emulation. **[AGS-102](https://github.com/BrandonKowalski/AGS-102)**, a fork of [BaseOS](https://github.com/pvaibhav/BaseOS) by @pvaibhav: the operating system slot boots on.
-- **[Open Sans](https://github.com/googlefonts/opensans)** (SIL Open Font License) and **[Nerd Fonts](https://www.nerdfonts.com)** symbols by Ryan L McIntyre (MIT), including the favourite star. The LCD3x screen shader's panel mask is derived from **gigaherz's LCD3x**.
+- **[Open Sans](https://github.com/googlefonts/opensans)** (SIL Open Font License) and **[Nerd Fonts](https://www.nerdfonts.com)** symbols by Ryan L McIntyre (MIT), including the favourite star. The LCD3x screen shader's panel mask is derived from **gigaherz's LCD3x** ([shader credits and licences](licenses/shaders.txt)).
 - The cartridge-label photographs in the [starter pack](artwork/gba-originals) are credited to their photographers in its README. Both slot and slot.advance were built with **Claude** (see [AI disclosure](#ai-disclosure)).
 
 slot.advance is released under the same licence as slot, the [GNU GPL v3 or later](LICENSE).
