@@ -7,7 +7,7 @@ This page explains how to build, run and test slot.advance from source, and how 
 - **[Rust](https://rustup.rs)**. The toolchain is pinned in [`rust-toolchain.toml`](../rust-toolchain.toml), and rustup installs the right version, with `rustfmt` and `clippy`, the first time you build.
 - **[Task](https://taskfile.dev)**, which runs the recipes in `taskfile.yml`.
 - **cmake** and **git**, to build the mGBA core from its pinned source.
-- **Docker**, for device builds, unless you are already on arm64 Linux.
+- **An arm64 (aarch64) machine for device builds**: arm64 Linux, or Docker on an arm64 host such as an Apple silicon Mac. See [Build for the RG SP (2026)](#build-for-the-rg-sp-2026).
 
 The desktop recipes (`task core`, `task run`, `task dist`) are written for **macOS**: they build or fetch the emulator cores as macOS libraries. Device builds and the test suite don't depend on that.
 
@@ -41,7 +41,11 @@ Other ways to run it:
 
 ## Build for the RG SP (2026)
 
-The device runs a 64-bit Arm (aarch64) Linux build. These tasks run their build steps in a `rust:1-bullseye` container through Docker, or directly when you're already on arm64 Linux.
+The device runs a 64-bit Arm (aarch64) Linux build. The device tasks don't cross-compile: they build natively, for the architecture they run on.
+
+- **On arm64 Linux**, they run directly.
+- **Anywhere else**, they run in a `rust:1-bullseye` container with a plain `docker run`, which doesn't ask Docker for a particular platform. On an arm64 host, such as an Apple silicon Mac with Docker Desktop, the container is arm64 and the build works.
+- **On an x86-64 host**, Docker uses the x86-64 image, so the result isn't an aarch64 build. Each device task checks its output with `file … | grep -q aarch64`, so it stops with an error instead of producing something that won't run on the device. Building there would need Docker to run the arm64 image under emulation (for example `DOCKER_DEFAULT_PLATFORM=linux/arm64` with QEMU set up), which hasn't been tested with these recipes. The release workflow avoids the question by running on GitHub's arm64 runners.
 
 | Task | What it does |
 |---|---|
