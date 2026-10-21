@@ -234,6 +234,8 @@ How much battery sleep uses is under [Sleep duration](#sleep-duration), and what
 
 ## Files on the games card
 
+**Recommended format: exFAT.** This is the file system used during slot.advance development and testing. It applies to the games card (SD2) only: the system card (SD1) is written from the BaseOS image and should not be reformatted. The [slot guide](https://slot-cfw.fyi) also allows FAT32, with a Master Boot Record (MBR) partition scheme in either case. FAT32 may also work with slot.advance, but has not been fully validated.
+
 | File or folder | What it holds |
 |---|---|
 | `Config/slot.state` | Your settings, including `sleep_minutes`, `show_titles` and `wifi`. |
