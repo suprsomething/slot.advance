@@ -65,7 +65,7 @@ The download is a complete games-card layout for the RG SP (2026). It holds no g
 ### New install
 
 1. Follow the [slot guide](https://slot-cfw.fyi) to set up the system card (SD1) for the RG SP (2026).
-2. Put your games card (SD2) in your computer, formatted as the slot guide describes.
+2. Put your games card (SD2) in your computer, formatted as the slot guide describes. exFAT is recommended for best compatibility with slot.advance.
 3. Unzip the download, `slot.advance-<version>-rg-sp.zip`. On a Mac, double-clicking it makes a folder of the same name.
 4. Open that folder and copy **everything inside it** (`BIOS`, `Config`, `Games`, `Labels`, `Saves`, `States`, `System`, `Wallpapers`) onto the top level of the games card. Copy the contents, not the folder itself.
 5. Put your `.gba` files in `Games/GBA` and, if you have it, the GBA BIOS (`gba_bios.bin`) in `BIOS`.
