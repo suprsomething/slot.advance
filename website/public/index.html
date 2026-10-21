@@ -178,6 +178,11 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
 .credit { margin: 0; color: var(--muted); font-size: 0.95rem; max-width: 34rem; text-wrap: pretty; }
 .credit a { color: var(--fg); text-decoration-color: var(--dim); text-underline-offset: 3px; }
 .credit a:hover { text-decoration-color: var(--fg); }
+/* Support: one quiet line and the Ko-fi button, below View on GitHub and set off by the same hairline as the footer */
+.support { gap: 1rem; width: 100%; margin-block: 1.25rem; padding-top: 2.5rem; border-top: 1px solid var(--line); }
+.support h2 { font-size: 1.15rem; }
+.kofi { display: block; width: min(240px, 100%); line-height: 0; }
+.kofi img { display: block; width: 100%; height: auto; }
 @media (prefers-reduced-motion: reduce) { .button { transition: none; } .button:hover { transform: none; } }
 </style>
 </head>
@@ -272,6 +277,11 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
       <svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
       View on GitHub
     </a>
+    <section class="support">
+      <h2>Support slot.advance</h2>
+      <p>slot.advance is free and open source. If you enjoy using it and would like to support its development, you can buy me a coffee. Completely optional.</p>
+      <a class="kofi" href="https://ko-fi.com/slotadvance"><img src="ko-fi-button.png" width="582" height="139" alt="Support slot.advance on Ko-fi" loading="lazy"></a>
+    </section>
     <p class="credit">slot.advance is an independent, open-source fork of <a href="https://github.com/BrandonKowalski/slot">Slot</a>, originally created by Brandon T. Kowalski, and built upon his incredible work, with additional features and optimisations for the Anbernic RG SP (2026). The Recents category is adapted from slots by <a href="https://github.com/ciscosweater">ciscosweater</a>. Licensed under <a href="https://github.com/suprsomething/slot.advance/blob/main/LICENSE">GPLv3</a>.</p>
   </footer>
 </main>

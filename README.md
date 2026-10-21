@@ -121,6 +121,14 @@ This build: **0.4.2** · [All releases](https://github.com/suprsomething/slot.ad
 
 ---
 
+## Support slot.advance
+
+slot.advance is free and open source. If you enjoy using it and would like to support its development, you can buy me a coffee. Completely optional.
+
+<a href="https://ko-fi.com/slotadvance"><img src="website/public/ko-fi-button.png" width="240" alt="Support slot.advance on Ko-fi"></a>
+
+---
+
 ## Credits
 
 - **[slot](https://github.com/BrandonKowalski/slot)** by Brandon T. Kowalski: the frontend this fork is built on. The cart sounds are recordings of his childhood Game Boy.
