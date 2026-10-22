@@ -337,10 +337,8 @@ impl Wifi {
     }
 
     pub fn address(&mut self, cancel: &Cancel) -> Option<Ipv4Addr> {
-        let cmd = Cmd::new(
-            &self.tools.ip,
-            &["-4", "-o", "addr", "show", "dev", "wlan0"],
-        );
+        // The form the Phase 0 kits used (`ip -4 addr show dev wlan0`).
+        let cmd = Cmd::new(&self.tools.ip, &["-4", "addr", "show", "dev", "wlan0"]);
         let out = self.run.run(&cmd, CLI_LIMIT, cancel).stdout;
         out.split_whitespace()
             .skip_while(|w| *w != "inet")
@@ -862,9 +860,9 @@ pub mod sim {
                     view.route(None);
                     ok("")
                 }
-                ("ip", ["-4", "-o", "addr", "show", "dev", "wlan0"]) => match s.addr {
+                ("ip", ["-4", "addr", "show", "dev", "wlan0"]) => match s.addr {
                     Some(a) => ok(&format!(
-                        "3: wlan0    inet {a}/24 brd 192.168.4.255 scope global wlan0\n"
+                        "3: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qlen 1000\n    inet {a}/24 brd 192.168.4.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n"
                     )),
                     None => ok(""),
                 },

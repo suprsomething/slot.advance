@@ -53,6 +53,8 @@ impl Cmd {
 pub struct Ran {
     /// The exit code, if it exited by itself.
     pub code: Option<i32>,
+    /// Everything it printed: standard output, then standard error. BusyBox tools such as
+    /// `ntpd` report on standard error (the Phase 0 kits captured both).
     pub stdout: String,
     pub timed_out: bool,
     pub cancelled: bool,
@@ -141,22 +143,31 @@ impl Runner for System {
             } else {
                 Stdio::null()
             })
-            .stderr(Stdio::null())
+            .stderr(if cmd.capture {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .spawn()
         {
             Ok(c) => c,
             Err(e) => return Ran::failed(&format!("{}: {e}", cmd.program)),
         };
-        // Read output on its own thread, so a chatty child can never fill the pipe and stall.
-        let reader = child.stdout.take().map(|mut out| {
-            let (tx, rx) = std::sync::mpsc::channel();
-            std::thread::spawn(move || {
-                let mut s = Vec::new();
-                let _ = out.read_to_end(&mut s);
-                let _ = tx.send(String::from_utf8_lossy(&s).into_owned());
-            });
-            rx
-        });
+        // Read output on its own threads, so a chatty child can never fill a pipe and stall.
+        fn reader<R: Read + Send + 'static>(
+            pipe: Option<R>,
+        ) -> Option<std::sync::mpsc::Receiver<String>> {
+            pipe.map(|mut out| {
+                let (tx, rx) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let mut s = Vec::new();
+                    let _ = out.read_to_end(&mut s);
+                    let _ = tx.send(String::from_utf8_lossy(&s).into_owned());
+                });
+                rx
+            })
+        }
+        let readers = [reader(child.stdout.take()), reader(child.stderr.take())];
         let until = Instant::now() + limit;
         let mut ran = Ran::default();
         loop {
@@ -196,11 +207,12 @@ impl Runner for System {
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        if let Some(rx) = reader {
-            // Something it started may still hold the pipe; never wait long for it.
-            ran.stdout = rx
-                .recv_timeout(Duration::from_millis(500))
-                .unwrap_or_default();
+        for rx in readers.into_iter().flatten() {
+            // Something it started may still hold a pipe; never wait long for it.
+            ran.stdout.push_str(
+                &rx.recv_timeout(Duration::from_millis(500))
+                    .unwrap_or_default(),
+            );
         }
         ran
     }
@@ -221,6 +233,23 @@ mod tests {
         assert_eq!(r.code, Some(3));
         assert_eq!(r.stdout, "hello\n");
         assert!(!r.ok());
+    }
+
+    #[test]
+    fn what_goes_to_standard_error_is_collected_too() {
+        let mut s = System::new();
+        let r = s.run(
+            &Cmd::new(
+                "/bin/sh",
+                &[
+                    "-c",
+                    "echo out; echo 'ntpd: reply from 1.2.3.4: offset:+1.5' >&2",
+                ],
+            ),
+            Duration::from_secs(5),
+            &Cancel::new(),
+        );
+        assert_eq!(r.stdout, "out\nntpd: reply from 1.2.3.4: offset:+1.5\n");
     }
 
     #[test]
