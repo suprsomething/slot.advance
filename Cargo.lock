@@ -1873,6 +1873,7 @@ dependencies = [
  "png 0.17.16",
  "slot-gfx",
  "slot-input",
+ "slot-net",
  "slot-power",
  "slot-retro",
  "slot-store",

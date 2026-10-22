@@ -580,6 +580,17 @@ impl Wifi {
     }
 }
 
+/// The controller as it runs on the RG SP.
+pub fn device(root: &Path) -> Wifi {
+    Wifi::new(
+        Box::new(crate::run::System::new()),
+        Sys::device(),
+        Ssh::device(),
+        root,
+        Path::new("/run"),
+    )
+}
+
 /// The key for a network chosen on the handheld, derived from what was typed.
 pub fn key_for(ssid: &[u8], password: Option<&str>) -> Result<Key, crate::psk::PasswordProblem> {
     match password {

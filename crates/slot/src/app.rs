@@ -378,6 +378,10 @@ pub struct App {
     /// may still cancel.
     expiring: bool,
     radio: Box<dyn RadioJobs>,
+    /// Networking (0.5.0). `NoNet` with Wi-Fi Off, which leaves sleep exactly as in 0.4.2.
+    net: Box<dyn crate::net::Net>,
+    /// When networking was last asked to go quiet, for the capped sleep gate.
+    net_quiet_asked: Millis,
     state_writer: crate::state_writer::StateWriter,
 }
 
@@ -422,6 +426,8 @@ impl App {
         let card_failing = state_writer.card_failing();
         App {
             radio: radio_jobs(),
+            net: Box::new(crate::net::NoNet),
+            net_quiet_asked: 0,
             state_writer,
             phase: Phase::Shelf,
             shelves,
@@ -1445,6 +1451,7 @@ impl App {
 
     pub fn restart(&mut self) {
         self.settle_saves();
+        self.net.before_poweroff();
         if let Some(power) = &mut self.power {
             power.restart();
         }
@@ -1556,6 +1563,7 @@ impl App {
 
     pub fn poweroff(&mut self) {
         self.settle_saves();
+        self.net.before_poweroff();
         if let Some(power) = &mut self.power {
             power.poweroff();
         }
@@ -2226,6 +2234,9 @@ impl App {
 
     fn timers(&mut self) {
         self.play_hold();
+        if self.no_game_seated() {
+            self.net.idle_moment();
+        }
         let offer = self.undo_label();
         if let Some(p) = &mut self.polaroids {
             p.set_undo(offer);
@@ -2921,6 +2932,15 @@ impl App {
         matches!(self.phase, Phase::Shelf)
     }
 
+    /// The carousel or its menus, with no game seated: the only time the clock may be
+    /// corrected from network time (requirement 22).
+    pub fn no_game_seated(&self) -> bool {
+        matches!(
+            self.phase,
+            Phase::Shelf | Phase::QuickMenu { .. } | Phase::About
+        )
+    }
+
     fn insert(&mut self, clean: bool) {
         if !self.on_shelf() {
             return;
@@ -3043,6 +3063,8 @@ impl App {
         if !saved {
             eprintln!("slot: sleep: the game could not be saved at lid close; no automatic shutdown until it is");
         }
+        // Only now, with the game saved, does networking go quiet (requirement 6).
+        self.ask_net_quiet();
         self.ask_radio(RadioJob::Cool);
         if let Some(power) = &mut self.power {
             power.on_close();
@@ -3060,6 +3082,35 @@ impl App {
         if let Some(power) = &mut self.power {
             power.on_open();
         }
+        // Only a wake with the lid open reconnects (requirement 5).
+        if !self.lid_shut {
+            self.net.lid_opened();
+        }
+    }
+
+    /// Asks networking to go quiet before a suspend (`wlan0` down in Wi-Fi On), and starts
+    /// the sleep gate's cap from now.
+    fn ask_net_quiet(&mut self) {
+        self.net_quiet_asked = self.now();
+        self.net.go_quiet();
+    }
+
+    /// The sleep gate (requirement 4): open once networking is quiet, or once the cap has
+    /// passed, so networking can never hold up a suspend. Always open with Wi-Fi Off.
+    fn net_gate_open(&self) -> bool {
+        self.net.is_quiet()
+            || self.now()
+                >= self
+                    .net_quiet_asked
+                    .saturating_add(crate::net::QUIET_CAP_MS)
+    }
+
+    pub fn set_net(&mut self, net: Box<dyn crate::net::Net>) {
+        self.net = net;
+    }
+
+    pub fn net(&self) -> &dyn crate::net::Net {
+        self.net.as_ref()
     }
 
     pub fn on_doze_timeout(&mut self) {
@@ -3093,6 +3144,7 @@ impl App {
             && !self.shutting_down()
             && !self.link_active()
             && self.now() >= self.sleep.next_try
+            && self.net_gate_open()
             && self.power.as_ref().is_some_and(|p| p.sleep_ready())
     }
 
@@ -3120,6 +3172,12 @@ impl App {
             return self.expire(uptime);
         }
         let secs = left.ceil().min(f64::from(u32::MAX)) as u32;
+        if !self.net.is_quiet() {
+            eprintln!(
+                "slot: sleep: networking not quiet after {} ms; suspending anyway",
+                self.now().saturating_sub(self.net_quiet_asked)
+            );
+        }
         eprintln!(
             "slot: sleep: suspending for up to {secs}s (battery {})",
             battery.map_or("unknown".to_string(), |b| format!("{}%", b.percent))
@@ -3157,7 +3215,9 @@ impl App {
                 self.wake();
             }
             Verdict::Expire => self.expire(uptime),
-            Verdict::SleepAgain | Verdict::Retry => {}
+            // Before every suspend, not just the first (Decision, 21 Oct): the next try is at
+            // least REST_AFTER_WAKE_MS away, well past the gate's cap.
+            Verdict::SleepAgain | Verdict::Retry => self.ask_net_quiet(),
             Verdict::Fallback => self.fall_back("hardware sleep gave up for this doze"),
         }
     }

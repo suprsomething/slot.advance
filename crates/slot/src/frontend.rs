@@ -567,6 +567,11 @@ impl Frontend {
     pub fn poweroff(&mut self) {
         self.session.app_mut().poweroff();
     }
+
+    /// Wi-Fi On (0.5.0): hands the app its network thread.
+    pub fn set_net(&mut self, net: Box<dyn crate::net::Net>) {
+        self.session.app_mut().set_net(net);
+    }
 }
 
 fn legend_faces(compositor: &mut Compositor, legend: &[(&str, &str)]) -> Vec<TexId> {
