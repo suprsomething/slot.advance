@@ -346,7 +346,7 @@ fn the_sleep_setting_is_used_and_kept() {
     common::clocked(d.path());
     let (mut a, _clock) = common::app_booting_at(d.path(), common::CLOCK_IS_SET);
     a.apply(Action::QuickMenu);
-    for _ in 0..2 {
+    for _ in 0..QuickRow::Sleep.position() {
         a.apply(Action::GbaDown(Btn::Down));
         a.apply(Action::GbaUp(Btn::Down));
     }

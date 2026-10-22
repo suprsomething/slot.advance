@@ -104,6 +104,7 @@ enum Job {
     Wake,
     Scan,
     Join(Vec<u8>, Key),
+    Prefer(Vec<u8>),
     Forget(Vec<u8>),
     AskTime,
     HandOver(u64),
@@ -279,6 +280,15 @@ impl NetJobs {
         self.send(Job::Forget(ssid.to_vec()));
     }
 
+    /// Switches to a saved network chosen on the handheld.
+    pub fn prefer(&self, ssid: &[u8]) {
+        if let Ok(mut s) = self.shared.status.lock() {
+            s.joining = Some(ssid.to_vec());
+            s.last_join = None;
+        }
+        self.send(Job::Prefer(ssid.to_vec()));
+    }
+
     /// Wi-Fi switched Off in the menu: disconnect and take `wlan0` down at once (A2). The
     /// driver is unloaded at the next start, as in 0.4.2.
     pub fn switch_off(&self) {
@@ -431,7 +441,8 @@ impl Worker {
             Job::Wake | Job::TakeBack if !self.started => self.start(),
             Job::Wake | Job::TakeBack => self.connect(),
             Job::Scan => self.scan(),
-            Job::Join(ssid, key) => self.join(ssid, key),
+            Job::Join(ssid, key) => self.join(ssid, Some(key)),
+            Job::Prefer(ssid) => self.join(ssid, None),
             Job::AskTime => self.ask_time(),
         }
     }
@@ -531,11 +542,15 @@ impl Worker {
         }
     }
 
-    fn join(&mut self, ssid: Vec<u8>, key: Key) {
+    /// A network chosen on the handheld: a new one with its key, or a saved one.
+    fn join(&mut self, ssid: Vec<u8>, key: Option<Key>) {
         self.shared.set_link(Link::Connecting(Some(ssid.clone())));
         let token = self.shared.cancel.token();
         let began = Instant::now();
-        let r = self.wifi.join(&ssid, key, &token);
+        let r = match key {
+            Some(key) => self.wifi.join(&ssid, key, &token),
+            None => self.wifi.prefer(&ssid, &token),
+        };
         let outcome = match &r {
             Joined::Connected { .. } => Some(JoinOutcome::Joined),
             Joined::NoAddress { .. } => Some(JoinOutcome::NoAddress),

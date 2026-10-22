@@ -456,6 +456,7 @@ impl Wifi {
             return Joined::Failed(format!("configuration: {e}"));
         }
         self.ip(&["link", "set", "wlan0", "up"], cancel);
+        self.cli(&["disconnect"], CLI_LIMIT, cancel);
         self.cli(&["reconfigure"], CLI_LIMIT, cancel);
         self.cli(&["reconnect"], CLI_LIMIT, cancel);
         // From here the running configuration holds only the candidate.
@@ -484,6 +485,32 @@ impl Wifi {
             }
         }
         result
+    }
+
+    /// Switches to a saved network chosen on the handheld: it becomes the newest (highest
+    /// priority) and the supplicant is told to reconnect.
+    pub fn prefer(&mut self, ssid: &[u8], cancel: &Cancel) -> Joined {
+        if !self.saved.contains(ssid) {
+            return Joined::NotFound;
+        }
+        if let Err(why) = self.clear_ssh() {
+            return Joined::Blocked(why);
+        }
+        self.saved.touch(ssid);
+        let _ = self.saved.save(&self.root);
+        let was_running = self.supplicant_running();
+        if let Err(e) = self.ensure_supplicant(cancel) {
+            return Joined::Failed(e);
+        }
+        self.ip(&["link", "set", "wlan0", "up"], cancel);
+        if was_running && self.write_conf(None).is_ok() {
+            // Leave the current network first, so the new priority order is used.
+            self.cli(&["disconnect"], CLI_LIMIT, cancel);
+            self.cli(&["reconfigure"], CLI_LIMIT, cancel);
+            self.conf_dirty = false;
+            self.cli(&["reconnect"], CLI_LIMIT, cancel);
+        }
+        self.finish_join(cancel)
     }
 
     /// Forgets a saved network. If it was the one in use, the supplicant moves to another
@@ -1198,6 +1225,31 @@ mod tests {
             matches!(r, Joined::Connected { ref ssid, .. } if ssid == b"B"),
             "{r:?}"
         );
+    }
+
+    #[test]
+    fn choosing_a_saved_network_switches_to_it() {
+        let (f, sim, d) = setup();
+        sim.add_network("A", Some("aaaaaaaa"), -50);
+        sim.add_network("B", Some("bbbbbbbb"), -60);
+        let mut w = wifi(&f, &sim, d.path());
+        w.join(
+            b"B",
+            key_for(b"B", Some("bbbbbbbb")).unwrap(),
+            &Cancel::new(),
+        );
+        w.join(
+            b"A",
+            key_for(b"A", Some("aaaaaaaa")).unwrap(),
+            &Cancel::new(),
+        );
+        let r = w.prefer(b"B", &Cancel::new());
+        assert!(
+            matches!(r, Joined::Connected { ref ssid, .. } if ssid == b"B"),
+            "{r:?}"
+        );
+        assert_eq!(w.saved_names()[0], b"B");
+        assert_eq!(w.prefer(b"Unknown", &Cancel::new()), Joined::NotFound);
     }
 
     #[test]

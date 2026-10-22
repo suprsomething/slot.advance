@@ -294,8 +294,8 @@ fn networking_that_never_goes_quiet_cannot_hold_up_the_suspend() {
 
 #[test]
 fn the_cap_is_shorter_than_the_settle() {
-    assert!(QUIET_CAP_MS < SETTLE_MS);
-    assert!(QUIET_CAP_MS < REST_AFTER_WAKE_MS);
+    const { assert!(QUIET_CAP_MS < SETTLE_MS) };
+    const { assert!(QUIET_CAP_MS < REST_AFTER_WAKE_MS) };
 }
 
 #[test]

@@ -257,6 +257,8 @@ pub enum Phase {
         cart: String,
     },
     About,
+    /// The Network menu and its screens (0.5.0).
+    Network,
     Doze {
         cart: Option<String>,
     },
@@ -382,6 +384,12 @@ pub struct App {
     net: Box<dyn crate::net::Net>,
     /// When networking was last asked to go quiet, for the capped sleep gate.
     net_quiet_asked: Millis,
+    /// The Network menu's screens while it is open.
+    net_menu: Option<crate::net_menu::NetMenu>,
+    net_face: Option<TexId>,
+    /// The Wi-Fi setting this session started with. Switching it On takes effect after a
+    /// restart (A2), so SlotLink keeps following this until then.
+    wifi_at_boot: bool,
     state_writer: crate::state_writer::StateWriter,
 }
 
@@ -428,6 +436,9 @@ impl App {
             radio: radio_jobs(),
             net: Box::new(crate::net::NoNet),
             net_quiet_asked: 0,
+            net_menu: None,
+            net_face: None,
+            wifi_at_boot: false,
             state_writer,
             phase: Phase::Shelf,
             shelves,
@@ -543,6 +554,7 @@ impl App {
         let mut app = App::new(carts);
         app.root = Some(root.to_path_buf());
         app.state = read_slot_state(root);
+        app.wifi_at_boot = app.state.wifi;
         let titles = app.state.show_titles;
         for (_, shelf) in &mut app.shelves {
             shelf.set_show_titles(titles);
@@ -914,6 +926,7 @@ impl App {
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
             QuickRow::Sleep => QuickValue::sleep(self.state.sleep_minutes),
             QuickRow::Titles => Some(QuickValue::flag(self.state.show_titles)),
+            QuickRow::Network => Some(QuickValue::flag(self.state.wifi)),
             QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => None,
         }
     }
@@ -1713,8 +1726,58 @@ impl App {
                 }
             }
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
+            Phase::Network => self.net_menu_input(action),
             _ => {}
         }
+    }
+
+    fn net_menu_input(&mut self, action: Action) {
+        use crate::net_menu::Effect;
+        let Some(menu) = &mut self.net_menu else {
+            self.phase = Phase::QuickMenu {
+                row: QuickRow::Network,
+            };
+            return;
+        };
+        match menu.input(action, self.net.as_mut(), self.state.wifi) {
+            Effect::None => {}
+            Effect::Close => {
+                self.net_menu = None;
+                self.phase = Phase::QuickMenu {
+                    row: QuickRow::Network,
+                };
+            }
+            Effect::SetWifi(on) => {
+                eprintln!(
+                    "slot: wifi: set {} ({})",
+                    if on { "on" } else { "off" },
+                    if on { "after a restart" } else { "now" }
+                );
+                self.state.wifi = on;
+                if !on {
+                    self.wifi_at_boot = false;
+                }
+                self.persist();
+            }
+            Effect::Restart => {
+                self.net_menu = None;
+                self.restarting = true;
+                self.act_at = self.now() + SHUTDOWN_SHOW_MS;
+                self.set_led(LedState::Off);
+            }
+        }
+    }
+
+    /// What the Network screen shows, while it is open.
+    pub fn net_view(&self) -> Option<slot_ui::NetView> {
+        match (&self.phase, &self.net_menu) {
+            (Phase::Network, Some(m)) => Some(m.view(self.net.as_ref(), self.state.wifi)),
+            _ => None,
+        }
+    }
+
+    pub fn set_net_face(&mut self, face: TexId) {
+        self.net_face = Some(face);
     }
 
     fn open_quick_menu(&mut self) {
@@ -1748,6 +1811,10 @@ impl App {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
+            QuickRow::Network => {
+                self.net_menu = Some(crate::net_menu::NetMenu::new());
+                self.phase = Phase::Network;
+            }
             QuickRow::Screen | QuickRow::Game => {
                 if let Some(row) = row.child() {
                     self.phase = Phase::QuickMenu { row };
@@ -1816,7 +1883,11 @@ impl App {
                 }
                 s.sleep_minutes = to;
             }
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => return,
+            QuickRow::DateTime
+            | QuickRow::About
+            | QuickRow::Screen
+            | QuickRow::Game
+            | QuickRow::Network => return,
         }
         self.persist();
     }
@@ -2237,6 +2308,9 @@ impl App {
         if self.no_game_seated() {
             self.net.idle_moment();
         }
+        if let Some(m) = &mut self.net_menu {
+            m.tick(self.net.as_ref());
+        }
         let offer = self.undo_label();
         if let Some(p) = &mut self.polaroids {
             p.set_undo(offer);
@@ -2521,6 +2595,10 @@ impl App {
             }
             Phase::About => {
                 draw_about(self.about_face, out);
+                return;
+            }
+            Phase::Network => {
+                draw_about(self.net_face, out);
                 return;
             }
             Phase::Inserting { cart, resumed, .. } => {
@@ -2937,7 +3015,7 @@ impl App {
     pub fn no_game_seated(&self) -> bool {
         matches!(
             self.phase,
-            Phase::Shelf | Phase::QuickMenu { .. } | Phase::About
+            Phase::Shelf | Phase::QuickMenu { .. } | Phase::About | Phase::Network
         )
     }
 
@@ -3045,6 +3123,8 @@ impl App {
         if matches!(self.phase, Phase::Doze { .. }) {
             return;
         }
+        // Closing the lid leaves the Network menu (anything typed is wiped).
+        self.net_menu = None;
         self.state_writer.flush();
         let saved = self.flush_resume() || self.flush_resume();
         let cart = match &mut self.phase {
@@ -3360,8 +3440,9 @@ impl App {
         if self.link_active() {
             return self.refuse();
         }
-        if !self.state.wifi {
-            // SlotLink runs over Wi-Fi, which is off unless `wifi=on` is set.
+        if !(self.state.wifi && self.wifi_at_boot) {
+            // SlotLink runs over Wi-Fi, which is off unless Wi-Fi was On when this session
+            // started (switching it On takes effect after a restart).
             self.hud.toast(Toast::LinkOff, self.now());
             return;
         }

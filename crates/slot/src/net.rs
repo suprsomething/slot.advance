@@ -49,6 +49,9 @@ pub trait Net: Send {
 
     fn forget(&mut self, _ssid: &[u8]) {}
 
+    /// Switches to a saved network.
+    fn prefer(&mut self, _ssid: &[u8]) {}
+
     /// Wi-Fi switched Off in the menu: down at once; the driver goes at the next start.
     fn switch_off(&mut self) {}
 }
@@ -109,6 +112,10 @@ impl Net for WifiOn {
 
     fn forget(&mut self, ssid: &[u8]) {
         self.jobs.forget(ssid);
+    }
+
+    fn prefer(&mut self, ssid: &[u8]) {
+        self.jobs.prefer(ssid);
     }
 
     fn switch_off(&mut self) {

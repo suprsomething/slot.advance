@@ -27,6 +27,16 @@ impl Psk {
     }
 }
 
+impl Drop for Psk {
+    /// The key is overwritten when it is no longer needed.
+    fn drop(&mut self) {
+        for b in self.0.iter_mut() {
+            // SAFETY: a volatile write to a byte this value owns.
+            unsafe { std::ptr::write_volatile(b, 0) };
+        }
+    }
+}
+
 impl fmt::Debug for Psk {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Psk(hidden)")
