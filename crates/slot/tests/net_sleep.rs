@@ -236,7 +236,10 @@ fn wifi_off_is_no_net_and_the_gate_is_always_open() {
     let mut t = playing(false, false);
     t.close_lid();
     t.wait(SETTLE_MS + 10);
-    assert!(t.app.sleep_due(), "Wi-Fi Off must sleep exactly when 0.4.2 did");
+    assert!(
+        t.app.sleep_due(),
+        "Wi-Fi Off must sleep exactly when 0.4.2 did"
+    );
     assert!(!t.app.net().running());
 }
 
@@ -305,10 +308,7 @@ fn wakes_with_the_lid_shut_never_reconnect() {
     t.then(Wake::Lid(30.0));
     t.sleep_once();
     assert!(t.playing());
-    assert_eq!(
-        t.s.events().iter().filter(|e| *e == "reconnect").count(),
-        1
-    );
+    assert_eq!(t.s.events().iter().filter(|e| *e == "reconnect").count(), 1);
 }
 
 #[test]
@@ -333,7 +333,10 @@ fn the_timer_running_out_stops_networking_before_powering_off() {
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| app.poweroff()));
     assert!(r.is_err());
     let ev = t.s.events();
-    let stop = ev.iter().position(|e| e == "net stop").expect("no network stop");
+    let stop = ev
+        .iter()
+        .position(|e| e == "net stop")
+        .expect("no network stop");
     let off = ev.iter().position(|e| e == "poweroff").unwrap();
     assert!(stop < off, "{ev:?}");
 }

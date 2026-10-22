@@ -199,6 +199,7 @@ impl NetJobs {
             shared: shared.clone(),
             tx: tx.clone(),
             last_renew: Instant::now(),
+            started: false,
         };
         let spawned = std::thread::Builder::new()
             .name("slot-net".into())
@@ -355,6 +356,9 @@ struct Worker {
     shared: Arc<Shared>,
     tx: Sender<Job>,
     last_renew: Instant,
+    /// The radio has been seen settled since boot. Until then, a wake starts from the top
+    /// (the lid may have closed while BaseOS was still bringing the radio up).
+    started: bool,
 }
 
 impl Worker {
@@ -424,6 +428,7 @@ impl Worker {
                 }
             }
             Job::Start => self.start(),
+            Job::Wake | Job::TakeBack if !self.started => self.start(),
             Job::Wake | Job::TakeBack => self.connect(),
             Job::Scan => self.scan(),
             Job::Join(ssid, key) => self.join(ssid, key),
@@ -470,6 +475,7 @@ impl Worker {
         if self.blocked() || token.is_cancelled() {
             return;
         }
+        self.started = true;
         eprintln!(
             "slot: wifi: on, {} saved network(s)",
             self.wifi.saved_names().len()
@@ -788,6 +794,28 @@ mod tests {
             r.sim.log()
         );
         assert_eq!(r.f.sys().wlan0_admin_up(), Some(false));
+    }
+
+    #[test]
+    fn a_lid_closed_before_the_radio_settled_still_connects_on_opening() {
+        let f = FakeSys::new();
+        f.set_uptime(5.0);
+        let sim = Sim::new(&f);
+        sim.add_network("Home", Some("home pass"), -50);
+        let d = card();
+        let mut w = wifi(&f, &sim, d.path());
+        w.saved.remember(
+            b"Home",
+            crate::wifi::key_for(b"Home", Some("home pass")).unwrap(),
+        );
+        let jobs = NetJobs::spawn_with(w, no_step);
+        std::thread::sleep(Duration::from_millis(100));
+        jobs.go_quiet();
+        wait_for("quiet", || jobs.is_quiet());
+        assert!(sim.log().iter().all(|l| !l.starts_with("wpa_supplicant")));
+        f.set_uptime(25.0);
+        jobs.lid_opened();
+        wait_for("connected", || connected(&jobs));
     }
 
     #[test]
