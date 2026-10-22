@@ -20,6 +20,9 @@ pub struct Cmd {
     /// Whether to collect what it prints. Off for anything that may leave a background
     /// process behind (a daemon could hold the output pipe open indefinitely).
     pub capture: bool,
+    /// Stop it early, as finished, once its output holds this text this many times
+    /// (`ntpd -w` never exits by itself).
+    pub stop_when: Option<(&'static str, usize)>,
 }
 
 impl Cmd {
@@ -29,6 +32,7 @@ impl Cmd {
             program: program.to_string(),
             args: args.iter().map(|a| a.to_string()).collect(),
             capture: true,
+            stop_when: None,
         }
     }
 
@@ -128,6 +132,8 @@ impl System {
 
 impl Runner for System {
     fn run(&mut self, cmd: &Cmd, limit: Duration, cancel: &Cancel) -> Ran {
+        use std::os::unix::process::CommandExt;
+        use std::sync::mpsc::{channel, Receiver};
         self.reap();
         if cancel.is_cancelled() {
             return Ran {
@@ -135,41 +141,67 @@ impl Runner for System {
                 ..Ran::default()
             };
         }
+        let pipe = || {
+            if cmd.capture {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            }
+        };
+        // Its own process group, so stopping it also stops anything it started (such as
+        // the DHCP client's script), which could otherwise bring wlan0 back up.
         let mut child = match Command::new(&cmd.program)
             .args(&cmd.args)
             .stdin(Stdio::null())
-            .stdout(if cmd.capture {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
-            .stderr(if cmd.capture {
-                Stdio::piped()
-            } else {
-                Stdio::null()
-            })
+            .stdout(pipe())
+            .stderr(pipe())
+            .process_group(0)
             .spawn()
         {
             Ok(c) => c,
             Err(e) => return Ran::failed(&format!("{}: {e}", cmd.program)),
         };
-        // Read output on its own threads, so a chatty child can never fill a pipe and stall.
-        fn reader<R: Read + Send + 'static>(
-            pipe: Option<R>,
-        ) -> Option<std::sync::mpsc::Receiver<String>> {
+        // Output is read on its own threads, a chunk at a time, so a chatty child never
+        // fills a pipe and stalls, and what has arrived can be looked at while it runs.
+        fn reader<R: Read + Send + 'static>(pipe: Option<R>) -> Option<Receiver<String>> {
             pipe.map(|mut out| {
-                let (tx, rx) = std::sync::mpsc::channel();
+                let (tx, rx) = channel();
                 std::thread::spawn(move || {
-                    let mut s = Vec::new();
-                    let _ = out.read_to_end(&mut s);
-                    let _ = tx.send(String::from_utf8_lossy(&s).into_owned());
+                    let mut buf = [0u8; 4096];
+                    loop {
+                        match out.read(&mut buf) {
+                            Ok(0) | Err(_) => break,
+                            Ok(n) => {
+                                if tx
+                                    .send(String::from_utf8_lossy(&buf[..n]).into_owned())
+                                    .is_err()
+                                {
+                                    break;
+                                }
+                            }
+                        }
+                    }
                 });
                 rx
             })
         }
-        let readers = [reader(child.stdout.take()), reader(child.stderr.take())];
+        let readers: Vec<Receiver<String>> =
+            [reader(child.stdout.take()), reader(child.stderr.take())]
+                .into_iter()
+                .flatten()
+                .collect();
+        let mut got = [String::new(), String::new()];
+        let drain = |got: &mut [String; 2]| {
+            for (i, rx) in readers.iter().enumerate() {
+                while let Ok(chunk) = rx.try_recv() {
+                    got[i].push_str(&chunk);
+                }
+            }
+        };
+        let pid = child.id() as libc::pid_t;
         let until = Instant::now() + limit;
         let mut ran = Ran::default();
+        let mut enough = false;
         loop {
             match child.try_wait() {
                 Ok(Some(status)) => {
@@ -179,7 +211,13 @@ impl Runner for System {
                 Ok(None) => {}
                 Err(_) => break,
             }
-            let stop = if cancel.is_cancelled() {
+            drain(&mut got);
+            if let Some((needle, n)) = cmd.stop_when {
+                enough = got.iter().map(|g| g.matches(needle).count()).sum::<usize>() >= n;
+            }
+            let stop = if enough {
+                true
+            } else if cancel.is_cancelled() {
                 ran.cancelled = true;
                 true
             } else if Instant::now() >= until {
@@ -189,6 +227,8 @@ impl Runner for System {
                 false
             };
             if stop {
+                // SAFETY: signals the child's own process group (made for it above).
+                unsafe { libc::kill(-pid, libc::SIGKILL) };
                 let _ = child.kill();
                 // Give it a moment to go; if it is stuck in the kernel, leave it to be
                 // reaped later rather than wait.
@@ -200,20 +240,26 @@ impl Runner for System {
                     if let Ok(mut stuck) = self.stuck.lock() {
                         stuck.push(child);
                     }
-                    // The reader would wait for the stuck child; do not wait for it.
+                    drain(&mut got);
+                    ran.stdout = got.concat();
                     return ran;
                 }
                 break;
             }
             std::thread::sleep(Duration::from_millis(5));
         }
-        for rx in readers.into_iter().flatten() {
-            // Something it started may still hold a pipe; never wait long for it.
-            ran.stdout.push_str(
-                &rx.recv_timeout(Duration::from_millis(500))
-                    .unwrap_or_default(),
-            );
+        // Collect the rest; something it started may still hold a pipe, so never wait long.
+        let deadline = Instant::now() + Duration::from_millis(500);
+        for (i, rx) in readers.iter().enumerate() {
+            loop {
+                let left = deadline.saturating_duration_since(Instant::now());
+                match rx.recv_timeout(left) {
+                    Ok(chunk) => got[i].push_str(&chunk),
+                    Err(_) => break,
+                }
+            }
         }
+        ran.stdout = got.concat();
         ran
     }
 }
@@ -311,6 +357,40 @@ mod tests {
             &Cancel::new(),
         );
         assert!(q.ok() && q.stdout.is_empty());
+    }
+
+    #[test]
+    fn it_can_stop_once_enough_has_been_said() {
+        let mut s = System::new();
+        let began = Instant::now();
+        let mut cmd = Cmd::new(
+            "/bin/sh",
+            &[
+                "-c",
+                "echo 'reply from a' >&2; echo 'reply from b' >&2; exec sleep 30",
+            ],
+        );
+        cmd.stop_when = Some(("reply from", 2));
+        let r = s.run(&cmd, Duration::from_secs(20), &Cancel::new());
+        assert!(began.elapsed() < Duration::from_secs(3));
+        assert!(!r.timed_out && !r.cancelled);
+        assert_eq!(r.stdout.matches("reply from").count(), 2);
+    }
+
+    #[test]
+    fn stopping_it_stops_what_it_started() {
+        let d = tempfile::tempdir().unwrap();
+        let mark = d.path().join("still-running");
+        let script = format!("(sleep 1; touch {}) & exec sleep 30", mark.display());
+        let mut s = System::new();
+        let r = s.run(
+            &Cmd::quiet("/bin/sh", &["-c", &script]),
+            Duration::from_millis(200),
+            &Cancel::new(),
+        );
+        assert!(r.timed_out);
+        std::thread::sleep(Duration::from_millis(1500));
+        assert!(!mark.exists(), "a process it started kept running");
     }
 
     #[test]

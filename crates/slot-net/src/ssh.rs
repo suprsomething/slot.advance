@@ -13,6 +13,8 @@ use std::time::Duration;
 use crate::sys::Sys;
 
 pub const SSH_DAEMON: &str = "dropbear";
+/// The same program when built as one binary for several tools.
+const SSH_MULTI: &str = "dropbearmulti";
 const SSH_PORT: u16 = 22;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,6 +46,12 @@ fn send(pid: u32, sig: i32) -> bool {
 }
 
 impl Ssh {
+    fn pids(&self) -> Vec<u32> {
+        let mut p = self.sys.pids_named(SSH_DAEMON);
+        p.extend(self.sys.pids_named(SSH_MULTI));
+        p
+    }
+
     pub fn device() -> Ssh {
         Ssh {
             sys: Sys::device(),
@@ -54,12 +62,12 @@ impl Ssh {
 
     /// Stops it if it is running, and confirms port 22 is closed.
     pub fn ensure_stopped(&self) -> SshCheck {
-        let first = self.sys.pids_named(SSH_DAEMON);
+        let first = self.pids();
         if first.is_empty() && !self.sys.tcp_listening(SSH_PORT) {
             return SshCheck::Stopped;
         }
         for _ in 0..6 {
-            let pids = self.sys.pids_named(SSH_DAEMON);
+            let pids = self.pids();
             if pids.is_empty() {
                 break;
             }
@@ -68,14 +76,14 @@ impl Ssh {
             }
             std::thread::sleep(self.wait);
         }
-        let left = self.sys.pids_named(SSH_DAEMON);
+        let left = self.pids();
         for p in &left {
             (self.kill)(*p, libc::SIGKILL);
         }
         if !left.is_empty() {
             std::thread::sleep(self.wait);
         }
-        let still = self.sys.pids_named(SSH_DAEMON);
+        let still = self.pids();
         if !still.is_empty() {
             return SshCheck::WouldNotStop {
                 why: format!("{SSH_DAEMON} still running (pids {still:?})"),

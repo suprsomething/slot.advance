@@ -124,7 +124,7 @@ struct Shared {
     status: Mutex<Status>,
     offer: Mutex<Option<Offer>>,
     clock_done: AtomicBool,
-    acks: Mutex<u64>,
+    acks: Mutex<std::collections::HashSet<u64>>,
     acked: Condvar,
     next_ack: AtomicU64,
 }
@@ -138,7 +138,7 @@ impl Shared {
 
     fn ack(&self, id: u64) {
         if let Ok(mut a) = self.acks.lock() {
-            *a = (*a).max(id);
+            a.insert(id);
             self.acked.notify_all();
         }
     }
@@ -148,7 +148,7 @@ impl Shared {
             return false;
         };
         let until = Instant::now() + limit;
-        while *a < id {
+        while !a.contains(&id) {
             let left = until.saturating_duration_since(Instant::now());
             if left.is_zero() {
                 return false;
@@ -158,6 +158,7 @@ impl Shared {
                 Err(_) => return false,
             };
         }
+        a.remove(&id);
         true
     }
 }
@@ -191,7 +192,7 @@ impl NetJobs {
             }),
             offer: Mutex::new(None),
             clock_done: AtomicBool::new(false),
-            acks: Mutex::new(0),
+            acks: Mutex::new(std::collections::HashSet::new()),
             acked: Condvar::new(),
             next_ack: AtomicU64::new(1),
         });
@@ -201,6 +202,8 @@ impl NetJobs {
             tx: tx.clone(),
             last_renew: Instant::now(),
             started: false,
+            token: Cancel::new(),
+            stopping: false,
         };
         let spawned = std::thread::Builder::new()
             .name("slot-net".into())
@@ -306,7 +309,7 @@ impl NetJobs {
         let Some(offer) = self.shared.offer.lock().ok().and_then(|mut o| o.take()) else {
             return;
         };
-        match clock::decide(&offer) {
+        match clock::decide(&offer, clock::system_now()) {
             Decision::Close => {
                 eprintln!(
                     "slot: time: the clock is {:+.2} s from network time; left alone",
@@ -343,7 +346,14 @@ impl NetJobs {
 
     /// SlotLink has finished with the radio: take it back (and reconnect, unless asleep).
     pub fn take_back(&self) {
-        if self.shared.handed_over.swap(false, Ordering::SeqCst) {
+        if !self.shared.handed_over.swap(false, Ordering::SeqCst) {
+            return;
+        }
+        if self.shared.quiet_wanted.load(Ordering::SeqCst) {
+            // Asleep: a fresh quiet request, so the sleep gate covers it.
+            let n = self.shared.quiet_asked.fetch_add(1, Ordering::SeqCst) + 1;
+            self.send(Job::Quiet(n));
+        } else {
             self.send(Job::TakeBack);
         }
     }
@@ -369,6 +379,11 @@ struct Worker {
     /// The radio has been seen settled since boot. Until then, a wake starts from the top
     /// (the lid may have closed while BaseOS was still bringing the radio up).
     started: bool,
+    /// Taken at the start of each job, before any check, so a quiet request that lands
+    /// between the check and the work still cancels it.
+    token: Cancel,
+    /// Power-off has begun: nothing may bring the link up again.
+    stopping: bool,
 }
 
 impl Worker {
@@ -396,12 +411,14 @@ impl Worker {
     }
 
     fn blocked(&self) -> bool {
-        self.shared.quiet_wanted.load(Ordering::SeqCst)
+        self.stopping
+            || self.shared.quiet_wanted.load(Ordering::SeqCst)
             || self.shared.switched_off.load(Ordering::SeqCst)
             || self.shared.handed_over.load(Ordering::SeqCst)
     }
 
     fn handle(&mut self, job: Job) {
+        self.token = self.shared.cancel.token();
         match job {
             Job::Quiet(n) => self.quiet(n),
             Job::HandOver(id) => {
@@ -411,7 +428,12 @@ impl Worker {
                 self.shared.ack(id);
             }
             Job::PowerOff(id) => {
-                // Phase 2 adds Syncthing's bounded stop here.
+                // Bounded: leave the network and stop the supplicant. Phase 2 adds
+                // Syncthing's bounded stop here.
+                self.stopping = true;
+                self.wifi.quiet();
+                self.wifi.stop_supplicant();
+                eprintln!("slot: wifi: stopped for power-off");
                 self.shared.ack(id);
             }
             Job::SwitchOff => {
@@ -420,18 +442,21 @@ impl Worker {
                 eprintln!("slot: wifi: switched off (disconnected, wlan0 down; driver unloaded at the next start)");
             }
             Job::Forget(ssid) => {
-                let token = self.shared.cancel.token();
-                self.wifi.forget(&ssid, &token);
+                let token = self.token.clone();
+                let was_in_use = self.wifi.forget(&ssid, &token);
                 self.publish_saved();
-                if !self.blocked() {
+                if was_in_use && !self.blocked() {
                     let _ = self.tx.send(Job::Wake);
                 }
             }
             _ if self.blocked() => {
-                // Asleep, switched off, or SlotLink has the radio: leave the link down.
+                // Asleep, switched off, stopping, or SlotLink has the radio: leave the link
+                // down. A join chosen on the handheld is reported as not done.
                 if let Ok(mut s) = self.shared.status.lock() {
                     s.scanning = false;
-                    s.joining = None;
+                    if let Some(ssid) = s.joining.take() {
+                        s.last_join = Some((ssid, JoinOutcome::Failed));
+                    }
                 }
                 if matches!(job, Job::TakeBack) {
                     self.take_back_quiet();
@@ -449,7 +474,11 @@ impl Worker {
 
     fn quiet(&mut self, n: u64) {
         let began = Instant::now();
-        let down = self.wifi.quiet();
+        let mut down = self.wifi.quiet();
+        if !down {
+            // Once more (something may have raised it again, such as a DHCP script).
+            down = self.wifi.quiet();
+        }
         let ms = began.elapsed().as_secs_f64() * 1000.0;
         self.shared.quiet_done.fetch_max(n, Ordering::SeqCst);
         if !self.shared.switched_off.load(Ordering::SeqCst) {
@@ -462,19 +491,15 @@ impl Worker {
         }
     }
 
-    /// SlotLink finished while the handheld is asleep (or Wi-Fi is off): restart the
-    /// supplicant, then make sure `wlan0` is down.
+    /// SlotLink finished while the handheld is asleep (or Wi-Fi is off): only make sure
+    /// `wlan0` is down. The supplicant is started again by the next lid-open reconnect.
     fn take_back_quiet(&mut self) {
-        let none = Cancel::new();
-        if !self.shared.switched_off.load(Ordering::SeqCst) {
-            let _ = self.wifi.ensure_supplicant(&none);
-        }
         self.wifi.quiet();
     }
 
     fn start(&mut self) {
         self.shared.set_link(Link::Starting);
-        let token = self.shared.cancel.token();
+        let token = self.token.clone();
         if !self.wifi.wait_for_radio(&token) {
             if !token.is_cancelled() {
                 eprintln!("slot: wifi: wlan0 never appeared; Wi-Fi not started");
@@ -500,7 +525,7 @@ impl Worker {
             return;
         }
         self.shared.set_link(Link::Connecting(None));
-        let token = self.shared.cancel.token();
+        let token = self.token.clone();
         let began = Instant::now();
         let r = self.wifi.connect_saved(&token);
         self.settle(r, began);
@@ -545,7 +570,7 @@ impl Worker {
     /// A network chosen on the handheld: a new one with its key, or a saved one.
     fn join(&mut self, ssid: Vec<u8>, key: Option<Key>) {
         self.shared.set_link(Link::Connecting(Some(ssid.clone())));
-        let token = self.shared.cancel.token();
+        let token = self.token.clone();
         let began = Instant::now();
         let r = match key {
             Some(key) => self.wifi.join(&ssid, key, &token),
@@ -556,7 +581,6 @@ impl Worker {
             Joined::NoAddress { .. } => Some(JoinOutcome::NoAddress),
             Joined::WrongPassword => Some(JoinOutcome::WrongPassword),
             Joined::NotFound => Some(JoinOutcome::NotFound),
-            Joined::Cancelled => None,
             _ => Some(JoinOutcome::Failed),
         };
         if let Ok(mut s) = self.shared.status.lock() {
@@ -573,7 +597,7 @@ impl Worker {
     }
 
     fn scan(&mut self) {
-        let token = self.shared.cancel.token();
+        let token = self.token.clone();
         let seen = self.wifi.scan(&token);
         if let Ok(mut s) = self.shared.status.lock() {
             s.scanning = false;
@@ -590,7 +614,7 @@ impl Worker {
         {
             return;
         }
-        let token = self.shared.cancel.token();
+        let token = self.token.clone();
         let began = Instant::now();
         match self.wifi.ask_time(&token) {
             Some(o) => {
@@ -617,10 +641,11 @@ impl Worker {
 
     /// Periodic look-in while awake.
     fn tick(&mut self) {
+        self.token = self.shared.cancel.token();
         if self.blocked() {
             return;
         }
-        let token = self.shared.cancel.token();
+        let token = self.token.clone();
         match self.link() {
             Link::Connected { .. } => {
                 if !self.wifi.check_ssh("while connected") {
@@ -834,6 +859,62 @@ mod tests {
     }
 
     #[test]
+    fn slotlink_ending_while_asleep_keeps_the_radio_quiet() {
+        let r = rig(true, no_step);
+        wait_for("connected", || connected(&r.jobs));
+        assert!(r.jobs.hand_over());
+        r.jobs.go_quiet();
+        wait_for("quiet", || r.jobs.is_quiet());
+        r.sim.clear_log();
+        r.jobs.take_back();
+        wait_for("quiet again", || r.jobs.is_quiet());
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(
+            r.sim
+                .log()
+                .iter()
+                .all(|l| !l.starts_with("wpa_supplicant") && l != "ip link set wlan0 up"),
+            "{:?}",
+            r.sim.log()
+        );
+        assert_eq!(r.f.sys().wlan0_admin_up(), Some(false));
+        r.jobs.lid_opened();
+        wait_for("reconnected on opening", || connected(&r.jobs));
+    }
+
+    #[test]
+    fn a_scan_never_starts_the_supplicant_while_ssh_runs() {
+        let r = rig(false, no_step);
+        wait_for("no networks", || r.jobs.status().link == Link::NoNetworks);
+        r.f.add_process(77, "dropbear", "S");
+        r.jobs.scan();
+        wait_for("scan over", || !r.jobs.status().scanning);
+        assert!(r.sim.log().iter().all(|l| !l.starts_with("wpa_supplicant")));
+    }
+
+    #[test]
+    fn power_off_leaves_the_network_and_nothing_restarts_it() {
+        let r = rig(true, no_step);
+        wait_for("connected", || connected(&r.jobs));
+        r.jobs.before_poweroff();
+        assert_eq!(r.f.sys().wlan0_admin_up(), Some(false));
+        assert!(r.f.sys().pids_named("wpa_supplicant").is_empty());
+        r.jobs.lid_opened();
+        std::thread::sleep(Duration::from_millis(200));
+        assert!(r.f.sys().pids_named("wpa_supplicant").is_empty());
+    }
+
+    #[test]
+    fn a_join_that_cannot_run_is_reported() {
+        let r = rig(true, no_step);
+        wait_for("connected", || connected(&r.jobs));
+        r.jobs.go_quiet();
+        r.jobs.join(b"Home", Some("home pass")).unwrap();
+        wait_for("an outcome", || r.jobs.status().last_join.is_some());
+        assert_eq!(r.jobs.status().joining, None);
+    }
+
+    #[test]
     fn a_lid_open_reconnects() {
         let r = rig(true, no_step);
         wait_for("connected", || connected(&r.jobs));
@@ -886,7 +967,7 @@ mod tests {
 
     static STEPPED: AtomicU32 = AtomicU32::new(0);
     fn count_step(s: f64) -> std::io::Result<()> {
-        assert!((s - 36.35).abs() < 1e-9);
+        assert!((s - 36.35).abs() < 0.01, "{s}");
         STEPPED.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }

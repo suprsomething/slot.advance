@@ -24,18 +24,36 @@ pub const OFFER_FRESH: Duration = Duration::from_secs(600);
 
 pub const POOL: &str = "pool.ntp.org";
 
-/// What a query found: how far the handheld's clock is behind (positive) or ahead.
+/// What a query found: how far the handheld's clock was behind (positive) or ahead, and
+/// when. The network's time is kept as an absolute time (the clock reading then plus the
+/// offset), so a step worked out later is still right even if the clock was set by hand
+/// in between.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Offer {
     pub offset_s: f64,
     pub replies: usize,
     pub at: Instant,
+    /// The system clock (seconds since 1970) when the answer came.
+    pub system_at: f64,
 }
 
 impl Offer {
     pub fn fresh(&self) -> bool {
         self.at.elapsed() < OFFER_FRESH
     }
+
+    /// How far the clock is out now, given the clock's reading now.
+    pub fn offset_now(&self, system_now: f64) -> f64 {
+        self.system_at + self.offset_s + self.at.elapsed().as_secs_f64() - system_now
+    }
+}
+
+/// The system clock, in seconds since 1970.
+pub fn system_now() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
 }
 
 /// Offsets from `ntpd` output lines like
@@ -72,6 +90,7 @@ pub fn offer_from(output: &str, at: Instant) -> Option<Offer> {
         offset_s,
         replies: v.len(),
         at,
+        system_at: system_now() - at.elapsed().as_secs_f64(),
     })
 }
 
@@ -86,13 +105,14 @@ pub enum Decision {
     Stale,
 }
 
-pub fn decide(offer: &Offer) -> Decision {
+pub fn decide(offer: &Offer, system_now: f64) -> Decision {
+    let offset = offer.offset_now(system_now);
     if !offer.fresh() {
         Decision::Stale
-    } else if offer.offset_s.abs() <= STEP_THRESHOLD_S {
+    } else if offset.abs() <= STEP_THRESHOLD_S {
         Decision::Close
     } else {
-        Decision::Step(offer.offset_s)
+        Decision::Step(offset)
     }
 }
 
@@ -155,11 +175,30 @@ mod tests {
             offset_s: s,
             replies: 1,
             at,
+            system_at: 1000.0,
         };
-        assert_eq!(decide(&o(36.5)), Decision::Step(36.5));
-        assert_eq!(decide(&o(-11.0)), Decision::Step(-11.0));
-        assert_eq!(decide(&o(0.44)), Decision::Close);
-        assert_eq!(decide(&o(-1.0)), Decision::Close);
+        let step = |d: Decision| match d {
+            Decision::Step(s) => s,
+            other => panic!("{other:?}"),
+        };
+        assert!((step(decide(&o(36.5), 1000.0)) - 36.5).abs() < 0.01);
+        assert!((step(decide(&o(-11.0), 1000.0)) + 11.0).abs() < 0.01);
+        assert_eq!(decide(&o(0.44), 1000.0), Decision::Close);
+        assert_eq!(decide(&o(-0.9), 1000.0), Decision::Close);
+    }
+
+    #[test]
+    fn a_clock_set_by_hand_meanwhile_is_not_undone() {
+        let o = Offer {
+            offset_s: 36.5,
+            replies: 1,
+            at: Instant::now(),
+            system_at: 1000.0,
+        };
+        // Set right by hand since the answer came: nothing left to do.
+        assert_eq!(decide(&o, 1036.5), Decision::Close);
+        // Set 100 s too far ahead by hand: stepped back to the network's time.
+        assert!(matches!(decide(&o, 1136.5), Decision::Step(s) if (s + 100.0).abs() < 0.01));
     }
 
     #[test]
@@ -171,7 +210,8 @@ mod tests {
             offset_s: 30.0,
             replies: 1,
             at: old,
+            system_at: 1000.0,
         };
-        assert_eq!(decide(&o), Decision::Stale);
+        assert_eq!(decide(&o, 1000.0), Decision::Stale);
     }
 }

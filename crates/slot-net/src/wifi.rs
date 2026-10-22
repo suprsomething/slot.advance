@@ -225,6 +225,10 @@ impl Wifi {
         if self.supplicant_running() {
             return Ok(());
         }
+        // A supplicant with saved networks may join one by itself, so SSH must be stopped
+        // first, whatever started it (a scan included).
+        self.clear_ssh()
+            .map_err(|why| format!("SSH would not stop ({why})"))?;
         self.write_conf(None)
             .map_err(|e| format!("configuration: {e}"))?;
         self.conf_dirty = false;
@@ -513,6 +517,7 @@ impl Wifi {
 
     /// Forgets a saved network. If it was the one in use, the supplicant moves to another
     /// saved network by itself.
+    /// Returns whether it was the network in use (which is then left).
     pub fn forget(&mut self, ssid: &[u8], cancel: &Cancel) -> bool {
         if !self.saved.forget(ssid) {
             return false;
@@ -520,11 +525,21 @@ impl Wifi {
         if let Err(e) = self.saved.save(&self.root) {
             eprintln!("slot: wifi: could not save the list after forgetting: {e}");
         }
-        if self.write_conf(None).is_ok() && self.supplicant_running() {
-            self.cli(&["reconfigure"], CLI_LIMIT, cancel);
-            self.conf_dirty = false;
+        if self.write_conf(None).is_err() || !self.supplicant_running() {
+            return false;
         }
-        true
+        let in_use = self.status(cancel).ssid == ssid;
+        if in_use {
+            self.cli(&["disconnect"], CLI_LIMIT, cancel);
+            self.cli(&["reconfigure"], CLI_LIMIT, cancel);
+            self.cli(&["reconnect"], CLI_LIMIT, cancel);
+            self.conf_dirty = false;
+        } else {
+            // Reloading now would drop the live connection; it is reloaded at the next
+            // reconnect instead.
+            self.conf_dirty = true;
+        }
+        in_use
     }
 
     /// Goes quiet before a suspend (state D): disconnect, drop the address, take `wlan0`
@@ -588,7 +603,9 @@ impl Wifi {
         args.push("-p".into());
         args.push(clock::POOL.into());
         let refs: Vec<&str> = args.iter().map(String::as_str).collect();
-        let cmd = Cmd::new(&self.tools.ntpd, &refs);
+        let mut cmd = Cmd::new(&self.tools.ntpd, &refs);
+        // Enough replies for a median; the limit still bounds a slow or silent network.
+        cmd.stop_when = Some(("reply from", 3));
         let r = self.run.run(&cmd, clock::QUERY_LIMIT, cancel);
         if r.cancelled {
             return None;

@@ -3306,6 +3306,8 @@ impl App {
     fn expire(&mut self, uptime: f64) {
         if self.sleep.unsaved && !self.retry_unsaved() {
             self.sleep.postpone(self.now(), uptime);
+            // Another suspend follows: quiet again first, as for every suspend.
+            self.ask_net_quiet();
             return;
         }
         eprintln!("slot: sleep: the sleep duration is up, shutting down");
@@ -3333,7 +3335,8 @@ impl App {
     }
 
     fn ask_radio(&mut self, job: RadioJob) {
-        if self.state.wifi {
+        // SlotLink's radio follows the setting this session started with (A2).
+        if self.state.wifi && self.wifi_at_boot {
             self.radio.ask(job);
         }
     }

@@ -46,7 +46,7 @@ pub fn unescape(s: &str) -> Vec<u8> {
             b't' => out.push(b'\t'),
             b'e' => out.push(0x1b),
             b'x' if i + 3 < b.len() => {
-                if let Some(v) = unhex(&s[i + 2..i + 4]) {
+                if let Some(v) = std::str::from_utf8(&b[i + 2..i + 4]).ok().and_then(unhex) {
                     out.push(v[0]);
                     i += 4;
                     continue;
@@ -97,6 +97,11 @@ mod tests {
         assert_eq!(unescape(r"end\"), b"end\\");
         assert_eq!(unescape(r"bad\xZZ"), br"bad\xZZ");
         assert_eq!(unescape("plain"), b"plain");
+        assert_eq!(
+            unescape("\\xé"),
+            "\\xé".as_bytes(),
+            "never panics on other bytes"
+        );
     }
 
     #[test]
