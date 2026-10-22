@@ -23,6 +23,11 @@ const STATUS_PX: f32 = 18.0;
 const LIST_PX: f32 = 24.0;
 const NOTE_PX: f32 = 15.0;
 const LIST_ROWS: usize = 6;
+/// Where the Network menu's label and value boxes start below their row. The labels are
+/// capitals with no descenders, so the font's line box sits them low; at 1 px their capitals
+/// are centred in the lit bar (to within half a pixel). The arrows keep their own place
+/// (`y + 6`), which already centres them.
+const MENU_TEXT_DY: f32 = 1.0;
 
 /// One row of the Network menu.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -356,7 +361,7 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
         if lit {
             bar(c, y);
         }
-        c.print(EDGE_X, y + 6.0, row.label, MENU_PX, MENU_INK, true);
+        c.print(EDGE_X, y + MENU_TEXT_DY, row.label, MENU_PX, MENU_INK, true);
         if let Some(v) = &row.value {
             let ink = if lit { MENU_INK } else { DIM };
             let right = OUT_W as f32 - EDGE_X;
@@ -366,10 +371,10 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
                 let rx = right - r.w as f32;
                 c.blit(&r, rx as u32, (y + 6.0) as u32);
                 let vx = rx - 14.0 - w;
-                c.print(vx, y + 6.0, v, MENU_PX, ink, true);
+                c.print(vx, y + MENU_TEXT_DY, v, MENU_PX, ink, true);
                 c.blit(&l, (vx - 14.0 - l.w as f32) as u32, (y + 6.0) as u32);
             } else {
-                c.print(right - w, y + 6.0, v, MENU_PX, ink, true);
+                c.print(right - w, y + MENU_TEXT_DY, v, MENU_PX, ink, true);
             }
         }
     }
@@ -628,6 +633,60 @@ mod tests {
             let f = net_face(&v);
             assert_eq!((f.w, f.h), (OUT_W, OUT_H));
             assert!(lit_pixels(&f) > 2000, "{v:?} drew almost nothing");
+        }
+    }
+
+    /// Rows of bright ink (label text) between columns `x0..x1`, and the lit bar's rows.
+    fn ink_and_bar(f: &UndoFace, x0: u32, x1: u32) -> ((u32, u32), (u32, u32)) {
+        let at = |x: u32, y: u32| ((y * f.w + x) * 4) as usize;
+        let edge = theme().edge;
+        let bar: Vec<u32> = (0..f.h)
+            .filter(|&y| f.rgba[at(2, y)..at(2, y) + 3] == edge)
+            .collect();
+        let ink: Vec<u32> = (0..f.h)
+            .filter(|&y| (x0..x1).any(|x| f.rgba[at(x, y)] > 180))
+            .filter(|&y| y >= bar[0] && y <= *bar.last().unwrap())
+            .collect();
+        (
+            (ink[0], *ink.last().unwrap()),
+            (bar[0], *bar.last().unwrap()),
+        )
+    }
+
+    #[test]
+    fn the_lit_menu_row_has_its_text_centred_in_the_bar() {
+        for (selected, value) in [(0, "Off"), (0, "On"), (1, "On")] {
+            let mut rows = vec![MenuRow {
+                label: "Wi-Fi",
+                value: Some(value.into()),
+                changes: true,
+            }];
+            if selected == 1 {
+                rows.push(MenuRow {
+                    label: "Networks",
+                    value: None,
+                    changes: false,
+                });
+            }
+            let f = net_face(&NetView::Menu {
+                rows,
+                selected,
+                status: vec![],
+            });
+            // The label, the value and (when lit) the arrows.
+            let spans: &[(u32, u32)] = if selected == 0 {
+                &[(20, 130), (595, 670), (560, 595), (670, 700)]
+            } else {
+                &[(20, 240)]
+            };
+            for &(x0, x1) in spans {
+                let ((top, bottom), (bar_top, bar_bottom)) = ink_and_bar(&f, x0, x1);
+                let off = (top + bottom) as f32 / 2.0 - (bar_top + bar_bottom) as f32 / 2.0;
+                assert!(
+                    off.abs() <= 1.0,
+                    "row {selected} columns {x0}..{x1}: ink {top}..{bottom}, bar {bar_top}..{bar_bottom}, {off} px off centre"
+                );
+            }
         }
     }
 
