@@ -57,6 +57,9 @@ pub struct SleepPaths {
     stats: PathBuf,
     uptime: PathBuf,
     lid: LidSensor,
+    /// V1 TEST BUILD ONLY (branch v1-test-c5, never merged): a card file holding how many
+    /// of the next suspends to fail on purpose, for validation C5.
+    forced_failures: Option<PathBuf>,
     enter: Enter,
 }
 
@@ -100,6 +103,7 @@ impl SleepPaths {
             stats: sys.join("kernel/debug/suspend_stats"),
             uptime: proc.join("uptime"),
             lid,
+            forced_failures: None,
             enter: Box::new(|state| fs::write(state, "mem")),
         })
     }
@@ -108,6 +112,42 @@ impl SleepPaths {
     pub fn with_enter(mut self, enter: Enter) -> Self {
         self.enter = enter;
         self
+    }
+
+    /// V1 TEST BUILD ONLY: fail the next N suspends, N read from `file` (validation C5).
+    /// With no file, an empty or unreadable one, or 0, nothing changes.
+    pub fn with_forced_failures(mut self, file: PathBuf) -> Self {
+        self.forced_failures = Some(file);
+        self
+    }
+
+    /// V1 TEST BUILD ONLY: true if this suspend is to fail on purpose. The count is
+    /// written down (and synced) before the failure, so a crash or power loss can never
+    /// leave more failures than were asked for; if it cannot be written, nothing is forced.
+    fn take_forced_failure(&self) -> bool {
+        let Some(file) = &self.forced_failures else {
+            return false;
+        };
+        let Some(n) = read_trim(file).and_then(|s| s.parse::<u32>().ok()) else {
+            return false;
+        };
+        if n == 0 {
+            return false;
+        }
+        let written =
+            fs::write(file, format!("{}\n", n - 1)).and_then(|()| fs::File::open(file)?.sync_all());
+        if let Err(e) = written {
+            eprintln!(
+                "slot: V1 TEST: could not count down {}: {e}; not forcing a failure",
+                file.display()
+            );
+            return false;
+        }
+        eprintln!(
+            "slot: V1 TEST: suspend failure forced ({} more to force after this)",
+            n - 1
+        );
+        true
     }
 
     /// Arms the lid as a wake source: `os_sleep=0` makes the power-key device (which owns
@@ -165,7 +205,13 @@ impl SleepPaths {
         let before = self.successes();
         let up_before = self.uptime();
         let mono = Instant::now();
-        let entered = (self.enter)(&self.state);
+        // V1 TEST BUILD ONLY: a forced failure takes the same path as the kernel refusing
+        // `mem` (alarm set and cleared, nothing counted, slept false).
+        let entered = if self.take_forced_failure() {
+            Err(io::Error::other("V1 TEST: forced suspend failure"))
+        } else {
+            (self.enter)(&self.state)
+        };
         let mono_secs = mono.elapsed().as_secs_f64();
         let up_after = self.uptime();
         let after = self.successes();
@@ -453,6 +499,45 @@ mod tests {
         fs::remove_file(m.sys.join("kernel/debug/suspend_stats")).unwrap();
         let p = sleeper(&m, 60.0, false);
         assert!(p.suspend(1800).slept);
+    }
+
+    #[test]
+    fn v1_test_forced_failures_count_down_then_stop() {
+        let m = mock();
+        let file = m.sys.join("v1-fail-suspends");
+        fs::write(&file, "2\n").unwrap();
+        let p = sleeper(&m, 1800.0, true).with_forced_failures(file.clone());
+        for left in ["1", "0"] {
+            let w = p.suspend(1800);
+            assert!(!w.slept, "a forced failure slept");
+            assert!(w.detail.contains("V1 TEST"), "{}", w.detail);
+            assert_eq!(read_trim(&file).as_deref(), Some(left));
+            assert_eq!(
+                read_trim(&m.sys.join("class/rtc/rtc1/wakealarm")).as_deref(),
+                Some("0"),
+                "a forced failure left the alarm set"
+            );
+        }
+        let w = p.suspend(1800);
+        assert!(
+            w.slept,
+            "the suspend after the forced ones did not sleep: {}",
+            w.detail
+        );
+        assert_eq!(read_trim(&file).as_deref(), Some("0"));
+    }
+
+    #[test]
+    fn v1_test_no_or_bad_file_forces_nothing() {
+        for contents in [None, Some(""), Some("two"), Some("-1"), Some("0")] {
+            let m = mock();
+            let file = m.sys.join("v1-fail-suspends");
+            if let Some(c) = contents {
+                fs::write(&file, c).unwrap();
+            }
+            let p = sleeper(&m, 1800.0, true).with_forced_failures(file);
+            assert!(p.suspend(1800).slept, "{contents:?} forced a failure");
+        }
     }
 
     #[test]

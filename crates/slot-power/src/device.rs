@@ -120,7 +120,15 @@ impl DevicePlatform {
                 Led::Mono { dir, max }
             }
         });
-        let sleep = SleepPaths::probe(sysfs, &sysfs.with_file_name("proc"));
+        // V1 TEST BUILD ONLY (branch v1-test-c5, never merged): validation C5 fails the
+        // next N suspends on purpose when System/v1-fail-suspends holds N.
+        let forced = root.join("System/v1-fail-suspends");
+        eprintln!(
+            "slot: V1 TEST BUILD: suspend failures can be forced from {}",
+            forced.display()
+        );
+        let sleep = SleepPaths::probe(sysfs, &sysfs.with_file_name("proc"))
+            .map(|p| p.with_forced_failures(forced));
         DevicePlatform {
             root,
             sysfs: sysfs.to_path_buf(),

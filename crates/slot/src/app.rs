@@ -3201,6 +3201,8 @@ impl App {
             self.dozed_at = self.now();
             return;
         }
+        // V1 TEST BUILD ONLY (branch v1-test-c5): marks the end of C5 in slot.log.
+        eprintln!("slot: V1 TEST: the doze timed out, shutting down");
         self.begin_power_off();
     }
 
