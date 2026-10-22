@@ -1,0 +1,13 @@
+[package]
+name = "slot-net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+libc = { workspace = true }
+slot-store = { path = "../slot-store" }
+
+[dev-dependencies]
+tempfile = { workspace = true }
