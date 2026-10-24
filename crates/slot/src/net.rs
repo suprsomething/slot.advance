@@ -9,10 +9,16 @@ use slot_input::Millis;
 use slot_net::{NetJobs, PasswordProblem, Status};
 
 /// The sleep gate's cap (O1): once this long has passed since the quiet request, a suspend
-/// goes ahead whether or not networking has finished going quiet. Phase 0C's worst was
-/// 15.2 ms; the plan's rule (about three times the worst) gives 50 ms. The first suspend
-/// of a doze waits at least `SETTLE_MS` (400 ms) anyway.
-pub const QUIET_CAP_MS: Millis = 50;
+/// goes ahead whether or not networking has finished going quiet. Set at checkpoint B
+/// (Dean, 24 Oct 2026) from the measured worst going-quiet time on the RG SP, 156.9 ms
+/// (V1; 136.6 ms in test build 2), by the plan's rule: about three times the worst, with
+/// a 2 s ceiling, rounded to 500 ms. Before, 50 ms (Phase 0C's worst was 15.2 ms).
+///
+/// The first suspend of a doze waits `SETTLE_MS` (400 ms) regardless, and later ones at
+/// least `REST_AFTER_WAKE_MS`, so with Wi-Fi going quiet as measured the cap changes
+/// nothing. Only a slow or hung driver can now hold the first suspend, by at most
+/// 100 ms beyond the settle. Reaching the cap is logged as a validation concern.
+pub const QUIET_CAP_MS: Millis = 500;
 
 pub trait Net: Send {
     /// Wi-Fi On is running (the setting was On at start, and not switched Off since).

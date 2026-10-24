@@ -3253,9 +3253,13 @@ impl App {
         }
         let secs = left.ceil().min(f64::from(u32::MAX)) as u32;
         if !self.net.is_quiet() {
+            // Only the cap can open the gate without quiet (O1). Never treated as a normal
+            // sleep: the line is marked for the validation summaries.
             eprintln!(
-                "slot: sleep: networking not quiet after {} ms; suspending anyway",
-                self.now().saturating_sub(self.net_quiet_asked)
+                "slot: sleep: networking not quiet after {} ms; suspending anyway \
+                 (VALIDATION CONCERN: sleep-gate cap of {} ms reached, Wi-Fi not confirmed down)",
+                self.now().saturating_sub(self.net_quiet_asked),
+                crate::net::QUIET_CAP_MS
             );
         }
         eprintln!(

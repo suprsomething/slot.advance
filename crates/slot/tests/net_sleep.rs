@@ -283,18 +283,40 @@ fn networking_that_never_goes_quiet_cannot_hold_up_the_suspend() {
     let mut t = playing(true, false);
     t.close_lid();
     assert!(!t.app.net().is_quiet());
+    // The settle has passed but the cap has not: the gate still waits for quiet.
     t.wait(SETTLE_MS + 10);
     assert!(
+        !t.app.sleep_due(),
+        "before the cap ({QUIET_CAP_MS} ms) the gate waits for networking"
+    );
+    // At the cap the suspend goes ahead anyway.
+    t.wait(QUIET_CAP_MS - SETTLE_MS);
+    assert!(
         t.app.sleep_due(),
-        "the cap ({QUIET_CAP_MS} ms) must open the gate within the settle"
+        "the cap ({QUIET_CAP_MS} ms) must open the gate"
     );
     t.app.sleep_now();
     assert_eq!(t.s.events(), ["quiet", "suspend (quiet false)"]);
 }
 
 #[test]
-fn the_cap_is_shorter_than_the_settle() {
-    const { assert!(QUIET_CAP_MS < SETTLE_MS) };
+fn networking_that_goes_quiet_adds_nothing_to_the_settle() {
+    let mut t = playing(true, true);
+    t.close_lid();
+    t.wait(SETTLE_MS + 10);
+    assert!(
+        t.app.sleep_due(),
+        "with networking quiet the first suspend comes at the settle, as in 0.4.2"
+    );
+    t.app.sleep_now();
+    assert_eq!(t.s.events(), ["quiet", "suspend (quiet true)"]);
+}
+
+#[test]
+fn the_cap_follows_the_measured_rule() {
+    // O1 (checkpoint B): 500 ms, under the plan's 2 s ceiling, and shorter than the rest
+    // after a wake, so it can only ever extend the first suspend of a doze.
+    const { assert!(QUIET_CAP_MS <= 2_000) };
     const { assert!(QUIET_CAP_MS < REST_AFTER_WAKE_MS) };
 }
 
