@@ -127,7 +127,11 @@ struct Shared {
     acks: Mutex<std::collections::HashSet<u64>>,
     acked: Condvar,
     next_ack: AtomicU64,
+    /// Told each time a connection is made (Syncthing's supervisor checks its health then).
+    on_connected: Mutex<Option<OnConnected>>,
 }
+
+type OnConnected = Arc<dyn Fn() + Send + Sync>;
 
 impl Shared {
     fn set_link(&self, link: Link) {
@@ -200,6 +204,7 @@ impl NetJobs {
             acks: Mutex::new(std::collections::HashSet::new()),
             acked: Condvar::new(),
             next_ack: AtomicU64::new(1),
+            on_connected: Mutex::new(None),
         });
         let worker = Worker {
             wifi,
@@ -350,6 +355,13 @@ impl NetJobs {
                 self.shared.clock_done.store(true, Ordering::SeqCst);
             }
             Decision::Stale => self.send(Job::AskTime),
+        }
+    }
+
+    /// Called (on the network thread, so it must not block) each time Wi-Fi connects.
+    pub fn set_on_connected(&self, f: impl Fn() + Send + Sync + 'static) {
+        if let Ok(mut h) = self.shared.on_connected.lock() {
+            *h = Some(Arc::new(f));
         }
     }
 
@@ -576,6 +588,12 @@ impl Worker {
         };
         let connected = matches!(link, Link::Connected { .. });
         self.shared.set_link(link);
+        if connected {
+            let hook = self.shared.on_connected.lock().ok().and_then(|h| h.clone());
+            if let Some(f) = hook {
+                f();
+            }
+        }
         if connected && !self.shared.clock_done.load(Ordering::SeqCst) {
             let need = self
                 .shared
@@ -1113,6 +1131,33 @@ mod tests {
         wait_for("an answer", || jobs.shared.offer.lock().unwrap().is_some());
         jobs.idle_moment();
         assert!(jobs.clock_done());
+    }
+
+    #[test]
+    fn each_connection_is_announced_to_the_hook() {
+        let f = FakeSys::new();
+        let sim = Sim::new(&f);
+        sim.add_network("Home", Some("home pass"), -50);
+        let d = card();
+        let mut w = wifi(&f, &sim, d.path());
+        w.saved.remember(
+            b"Home",
+            crate::wifi::key_for(b"Home", Some("home pass")).unwrap(),
+        );
+        let jobs = NetJobs::spawn_with(w, no_step, no_rtc);
+        let seen = Arc::new(AtomicU32::new(0));
+        let s = seen.clone();
+        jobs.set_on_connected(move || {
+            s.fetch_add(1, Ordering::SeqCst);
+        });
+        wait_for("connected", || connected(&jobs));
+        wait_for("announced", || seen.load(Ordering::SeqCst) >= 1);
+        jobs.go_quiet();
+        wait_for("quiet", || jobs.is_quiet());
+        let before = seen.load(Ordering::SeqCst);
+        jobs.lid_opened();
+        wait_for("reconnected", || connected(&jobs));
+        wait_for("announced again", || seen.load(Ordering::SeqCst) > before);
     }
 
     #[test]
