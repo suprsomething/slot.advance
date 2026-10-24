@@ -31,14 +31,18 @@ impl Exit {
 /// What the supervisor needs from the operating system, so it can be tested without one.
 pub trait Procs: Send {
     /// Starts `program args` with `env`, in a new process group, with no input or output.
-    /// `on_exit` is called from another thread with how it ended (it is reaped there).
+    /// `on_exit` is called from another thread with its pid and how it ended (it is reaped
+    /// there).
     fn spawn(
         &mut self,
         program: &Path,
         args: &[String],
         env: &[(String, String)],
-        on_exit: Box<dyn FnOnce(Exit) + Send>,
+        on_exit: Box<dyn FnOnce(u32, Exit) + Send>,
     ) -> std::io::Result<u32>;
+
+    /// Another handle on the same operating system (for the power-off stop).
+    fn handle(&self) -> Box<dyn Procs>;
 
     /// Processes whose parent is `pid`.
     fn children(&self, pid: u32) -> Vec<u32>;
@@ -105,7 +109,7 @@ impl Procs for System {
         program: &Path,
         args: &[String],
         env: &[(String, String)],
-        on_exit: Box<dyn FnOnce(Exit) + Send>,
+        on_exit: Box<dyn FnOnce(u32, Exit) + Send>,
     ) -> std::io::Result<u32> {
         use std::os::unix::process::{CommandExt, ExitStatusExt};
         let mut child = Command::new(program)
@@ -128,9 +132,15 @@ impl Procs for System {
                     },
                     Err(_) => Exit::Signal,
                 };
-                on_exit(exit);
+                on_exit(pid, exit);
             })?;
         Ok(pid)
+    }
+
+    fn handle(&self) -> Box<dyn Procs> {
+        Box::new(System {
+            proc_root: self.proc_root.clone(),
+        })
     }
 
     fn children(&self, pid: u32) -> Vec<u32> {
@@ -161,7 +171,13 @@ impl Procs for System {
     }
 
     fn using(&self, program: &Path, config: &Path) -> Vec<u32> {
-        let want_prog = program.to_string_lossy().into_owned();
+        // The monitor runs the real Syncthing with its resolved path, so the path may differ
+        // from ours (a symlinked card, review M2): match the program's name and our exact
+        // settings folder instead.
+        let name = program
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
         let want_conf = format!("--config={}", config.to_string_lossy());
         self.pids()
             .into_iter()
@@ -174,8 +190,11 @@ impl Procs for System {
                     .split(|b| *b == 0)
                     .map(|a| String::from_utf8_lossy(a).into_owned())
                     .collect();
-                args.first().is_some_and(|a| *a == want_prog)
-                    && args.contains(&want_conf)
+                args.first().is_some_and(|a| {
+                    Path::new(a)
+                        .file_name()
+                        .is_some_and(|f| f.to_string_lossy() == name)
+                }) && args.contains(&want_conf)
                     && self.alive(*p)
             })
             .collect()
@@ -322,6 +341,7 @@ mod tests {
                 52,
                 "/usr/bin/syncthing\0serve\0--config=/c/Config/syncthing/config\0",
             ),
+            (53, "/c/System/slot\0--config=/c/Config/syncthing/config\0"),
         ] {
             let p = d.path().join(pid.to_string());
             std::fs::create_dir(&p).unwrap();
@@ -335,12 +355,15 @@ mod tests {
         let s = System {
             proc_root: d.path().to_path_buf(),
         };
+        let mut found = s.using(
+            Path::new("/c/System/syncthing"),
+            Path::new("/c/Config/syncthing/config"),
+        );
+        found.sort_unstable();
         assert_eq!(
-            s.using(
-                Path::new("/c/System/syncthing"),
-                Path::new("/c/Config/syncthing/config")
-            ),
-            [50]
+            found,
+            [50, 52],
+            "the real Syncthing may run under its resolved path"
         );
     }
 
@@ -353,7 +376,7 @@ mod tests {
                 Path::new("/bin/sh"),
                 &["-c".into(), "exit 3".into()],
                 &[],
-                Box::new(move |e| {
+                Box::new(move |_, e| {
                     let _ = tx.send(e);
                 }),
             )

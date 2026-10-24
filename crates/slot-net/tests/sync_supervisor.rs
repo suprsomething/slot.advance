@@ -31,7 +31,7 @@ struct Proc {
 struct World {
     next_pid: u32,
     procs: BTreeMap<u32, Proc>,
-    exits: BTreeMap<u32, Box<dyn FnOnce(Exit) + Send>>,
+    exits: BTreeMap<u32, Box<dyn FnOnce(u32, Exit) + Send>>,
     spawned: Vec<Vec<String>>,
     generated: Vec<String>,
     generate_fails: bool,
@@ -46,6 +46,10 @@ struct World {
     folders: BTreeMap<String, Folder>,
     signals: Vec<(u32, i32, bool)>,
     leftovers: Vec<u32>,
+    /// Makes a health check or `generate` take this long (the supervisor is busy).
+    slow_health: Option<Duration>,
+    slow_generate: Option<Duration>,
+    patch_fails: bool,
 }
 
 type W = Arc<Mutex<World>>;
@@ -63,7 +67,7 @@ fn end(w: &mut World, monitor: u32, exit: Exit) {
     }
     if let Some(f) = w.exits.remove(&monitor) {
         // Called outside the lock by the real waiter thread; here a thread keeps it so.
-        std::thread::spawn(move || f(exit));
+        std::thread::spawn(move || f(monitor, exit));
     }
 }
 
@@ -75,7 +79,7 @@ impl Procs for FakeProcs {
         _program: &Path,
         args: &[String],
         _env: &[(String, String)],
-        on_exit: Box<dyn FnOnce(Exit) + Send>,
+        on_exit: Box<dyn FnOnce(u32, Exit) + Send>,
     ) -> std::io::Result<u32> {
         let mut w = self.0.lock().unwrap();
         w.next_pid += 2;
@@ -144,13 +148,17 @@ impl Procs for FakeProcs {
                 p.alive = false;
             }
             if let Some(f) = w.exits.remove(&t) {
-                std::thread::spawn(move || f(Exit::Signal));
+                std::thread::spawn(move || f(t, Exit::Signal));
             }
         }
     }
 
     fn pgid(&self, pid: u32) -> Option<u32> {
         self.0.lock().unwrap().procs.get(&pid).map(|p| p.pgid)
+    }
+
+    fn handle(&self) -> Box<dyn Procs> {
+        Box::new(FakeProcs(self.0.clone()))
     }
 
     fn using(&self, _program: &Path, _config: &Path) -> Vec<u32> {
@@ -170,6 +178,10 @@ impl Procs for FakeProcs {
         input: &str,
         _limit: Duration,
     ) -> std::io::Result<(Option<i32>, String)> {
+        let slow = self.0.lock().unwrap().slow_generate;
+        if let Some(d) = slow {
+            std::thread::sleep(d);
+        }
         let mut w = self.0.lock().unwrap();
         if w.generate_fails {
             return Ok((Some(1), "generate failed".into()));
@@ -201,6 +213,10 @@ struct FakeApi(W);
 
 impl Api for FakeApi {
     fn health(&mut self) -> Health {
+        let slow = self.0.lock().unwrap().slow_health;
+        if let Some(d) = slow {
+            std::thread::sleep(d);
+        }
         let mut w = self.0.lock().unwrap();
         if !w.health.is_empty() {
             return w.health.remove(0);
@@ -215,6 +231,9 @@ impl Api for FakeApi {
     fn patch_gui(&mut self, body: &str) -> Result<(), String> {
         let mut w = self.0.lock().unwrap();
         w.patches.push(body.to_string());
+        if w.patch_fails {
+            return Err("timed out".into());
+        }
         let n = w.patches.len();
         if let Some(g) = w.gui.as_mut() {
             if body.contains("\"useTLS\":true") {
@@ -741,4 +760,77 @@ fn nothing_runs_until_switched_on() {
     let w = r.w.lock().unwrap();
     assert!(w.spawned.is_empty() && w.generated.is_empty());
     assert!(!r.layout.dir.exists());
+}
+
+#[test]
+fn power_off_stops_syncthing_even_while_the_supervisor_is_busy() {
+    let r = rig();
+    r.sync.enable();
+    running(&r);
+    // The next health check hangs for 2 s (a stuck Syncthing): the supervisor is busy.
+    r.w.lock().unwrap().slow_health = Some(Duration::from_secs(2));
+    std::thread::sleep(limits().health + Duration::from_millis(30));
+    let began = Instant::now();
+    assert!(r.sync.before_poweroff());
+    assert!(
+        began.elapsed() < limits().stop_total() + Duration::from_millis(100),
+        "{:?}",
+        began.elapsed()
+    );
+    assert_eq!(
+        alive_count(&r),
+        0,
+        "stopped first, without waiting for the busy thread"
+    );
+    // The busy REST client was not waited for: SIGTERM did it.
+    let w = r.w.lock().unwrap();
+    assert!(w.signals.iter().any(|s| s.1 == libc::SIGTERM));
+}
+
+#[test]
+fn power_off_during_first_setup_means_nothing_starts() {
+    let r = rig_with(|w, _| {
+        w.gui = Some(gui_ok());
+        w.slow_generate = Some(Duration::from_millis(300));
+    });
+    r.sync.enable();
+    std::thread::sleep(Duration::from_millis(50));
+    let began = Instant::now();
+    assert!(r.sync.before_poweroff());
+    assert!(
+        began.elapsed() < Duration::from_millis(100),
+        "nothing to wait for"
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    let w = r.w.lock().unwrap();
+    assert_eq!(w.generated.len(), 1, "setup finished");
+    assert!(w.spawned.is_empty(), "but Syncthing never started");
+}
+
+#[test]
+fn power_off_with_nothing_running_returns_at_once() {
+    let r = rig();
+    let began = Instant::now();
+    assert!(r.sync.before_poweroff());
+    assert!(began.elapsed() < Duration::from_millis(50));
+}
+
+#[test]
+fn a_failed_floor_repair_counts_as_a_failure_not_an_instant_restart() {
+    let r = rig();
+    r.sync.enable();
+    running(&r);
+    {
+        let mut w = r.w.lock().unwrap();
+        w.patch_fails = true;
+        w.gui.as_mut().unwrap().insecure_hostcheck = true;
+    }
+    // One or two failed repairs: no restart yet.
+    wait_for("a failed repair", || {
+        !r.w.lock().unwrap().patches.is_empty()
+    });
+    assert_eq!(r.w.lock().unwrap().spawned.len(), 1);
+    // The third in a row restarts it.
+    wait_for("restart", || r.w.lock().unwrap().spawned.len() == 2);
+    assert!(r.w.lock().unwrap().patches.len() >= 3);
 }

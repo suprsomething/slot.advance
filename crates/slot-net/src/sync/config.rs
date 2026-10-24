@@ -1,7 +1,7 @@
 //! Where Syncthing lives on the card, its first setup, and the security floor in its
 //! settings file (plan 3.2, 3.3, 8.4 refinements 3 and 5).
 
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -90,17 +90,22 @@ impl Settings {
             .or_else(|| a.strip_prefix("http://"))
             .unwrap_or(a);
         if let Ok(sa) = a.parse::<SocketAddr>() {
-            if sa.ip().is_unspecified() || sa.ip().is_loopback() {
-                return Some(SocketAddr::V4(SocketAddrV4::new(
-                    Ipv4Addr::LOCALHOST,
-                    sa.port(),
-                )));
-            }
-            return Some(sa);
+            // Loopback of the same family (review M5: an IPv6-only listener never answers
+            // on 127.0.0.1).
+            return Some(match sa {
+                SocketAddr::V4(v4) if v4.ip().is_unspecified() || v4.ip().is_loopback() => {
+                    SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, v4.port()))
+                }
+                SocketAddr::V6(v6) if v6.ip().is_unspecified() || v6.ip().is_loopback() => {
+                    SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::LOCALHOST, v6.port(), 0, 0))
+                }
+                other => other,
+            });
         }
-        // "localhost:8384" or ":8384".
-        let port: u16 = a.rsplit(':').next()?.parse().ok()?;
-        let host = &a[..a.len() - port.to_string().len() - 1];
+        // "localhost:8384" or ":8384". Anything else (a host name, or a bare "8384") is
+        // not used: reported, never guessed, and never a panic (review M5).
+        let (host, port) = a.rsplit_once(':')?;
+        let port: u16 = port.parse().ok()?;
         matches!(host, "" | "localhost")
             .then(|| SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)))
     }
@@ -250,15 +255,21 @@ pub fn found(layout: &Layout) -> Found {
     match std::fs::read_dir(&layout.dir) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Found::Nothing,
         Err(e) => Found::Problem(format!("Config/syncthing unreadable ({e})")),
-        Ok(mut rd) => {
-            if rd.next().is_none() {
-                Found::Nothing
-            } else {
-                Found::Problem(
-                    "Config/syncthing has files but no config/config.xml; nothing was changed"
-                        .into(),
-                )
+        Ok(rd) => {
+            let mut names: Vec<String> = rd
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            if names.is_empty() {
+                return Found::Nothing;
             }
+            names.sort();
+            names.truncate(5);
+            Found::Problem(format!(
+                "Config/syncthing has files ({}) but no config/config.xml; nothing was changed. \
+                 To start afresh, remove the Config/syncthing folder on a computer",
+                names.join(", ")
+            ))
         }
     }
 }
@@ -549,6 +560,24 @@ mod tests {
         assert_eq!(s.endpoint(), Some("127.0.0.1:8384".parse().unwrap()));
         s.gui_address = "localhost:8384".into();
         assert_eq!(s.port(), 8384);
+        // Review M5: none of these may panic.
+        for odd in [
+            "8384",
+            "",
+            ":",
+            "nas.local:8384",
+            "localhost",
+            "a:b",
+            "::::",
+        ] {
+            s.gui_address = odd.into();
+            assert_eq!(s.endpoint(), None, "{odd}");
+            assert_eq!(s.port(), PORT);
+        }
+        s.gui_address = "[::]:8384".into();
+        assert_eq!(s.endpoint(), Some("[::1]:8384".parse().unwrap()));
+        s.gui_address = "[::1]:9000".into();
+        assert_eq!(s.endpoint(), Some("[::1]:9000".parse().unwrap()));
     }
 
     #[test]

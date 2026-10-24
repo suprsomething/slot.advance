@@ -3,9 +3,8 @@
 //! Wi-Fi quiet request, the sleep gate or the game. It is never in the lid, sleep or resume
 //! path: during suspend Syncthing and this thread are simply frozen with everything else.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use super::api::{reset_body, Api, Folder, Health, Rest};
@@ -61,6 +60,8 @@ pub const FAILS_BEFORE_RESTART: u32 = 3;
 /// After this many restarts for failures in one session, it stays in Error until the
 /// toggle is switched (so a broken setup never loops).
 pub const MAX_RESTARTS: u32 = 3;
+/// Restarts are forgotten after this long running healthily.
+const RESTARTS_FORGOTTEN_AFTER: Duration = Duration::from_secs(3600);
 /// Restarts asked for from the web interface's Restart button, within ten minutes.
 const MAX_USER_RESTARTS: usize = 5;
 
@@ -103,56 +104,137 @@ enum Job {
     Reconnected,
     MenuOpened,
     Reset,
-    PowerOff(u64),
+    PowerOff,
     Exited(u32, Exit),
 }
 
-struct Shared {
-    status: Mutex<SyncStatus>,
-    acks: Mutex<std::collections::HashSet<u64>>,
-    acked: Condvar,
-    next_ack: AtomicU64,
+/// What is running, shared with the game thread so the stop before power-off never waits
+/// for the supervisor thread to be free (review M1).
+struct RunInfo {
+    monitor: u32,
+    child: Option<u32>,
+    api: SharedApi,
 }
 
-impl Shared {
-    fn ack(&self, id: u64) {
-        if let Ok(mut a) = self.acks.lock() {
-            a.insert(id);
-            self.acked.notify_all();
-        }
-    }
+#[derive(Default)]
+struct Gate {
+    /// Power-off has begun: nothing may start again.
+    stopping: bool,
+    run: Option<RunInfo>,
+}
 
-    fn wait_ack(&self, id: u64, limit: Duration) -> bool {
-        let until = Instant::now() + limit;
-        let Ok(mut a) = self.acks.lock() else {
-            return false;
-        };
-        loop {
-            if a.remove(&id) {
-                return true;
-            }
-            let left = until.saturating_duration_since(Instant::now());
-            if left.is_zero() {
-                return false;
-            }
-            match self.acked.wait_timeout(a, left) {
-                Ok((g, _)) => a = g,
-                Err(_) => return false,
-            }
-        }
-    }
+type SharedApi = Arc<Mutex<Box<dyn Api>>>;
+
+struct Shared {
+    status: Mutex<SyncStatus>,
+    /// Held only for a moment: around a spawn, and to take the running processes at
+    /// power-off. A start and a power-off therefore never miss each other.
+    gate: Mutex<Gate>,
+    /// A second handle on the operating system, for the game thread's power-off stop.
+    procs: Mutex<Box<dyn Procs>>,
 }
 
 /// Makes the REST client for a running Syncthing (tests substitute a stand-in).
 pub type ApiFactory = Box<dyn FnMut(&Layout, &Settings) -> Option<Box<dyn Api>> + Send>;
 
 /// The game thread's handle. Cheap to clone; every call returns at once except
-/// `before_poweroff`, which is bounded.
+/// `before_poweroff`, which is bounded by the 5 s stop limit.
 #[derive(Clone)]
 pub struct Syncthing {
     tx: Sender<Job>,
     shared: Arc<Shared>,
     limits: Limits,
+}
+
+/// The staged stop (P2-5, refinement 1): REST shutdown, then SIGTERM to the monitor, then
+/// SIGKILL of the real Syncthing's process group and the monitor; at most `stop_total`.
+/// When `wait_for_api` is false (power-off), a REST client busy with another request is
+/// skipped rather than waited for.
+fn stop_staged(
+    procs: &dyn Procs,
+    api: &SharedApi,
+    monitor: u32,
+    child: Option<u32>,
+    limits: &Limits,
+    wait_for_api: bool,
+) -> Stopped {
+    let began = Instant::now();
+    let remaining = |end: Duration| end.saturating_sub(began.elapsed());
+    let gone = |pids: &[u32], limit: Duration| {
+        let until = Instant::now() + limit;
+        loop {
+            if pids.iter().all(|p| !procs.alive(*p)) {
+                return true;
+            }
+            if Instant::now() >= until {
+                return false;
+            }
+            std::thread::sleep(limits.stop_poll);
+        }
+    };
+    let mut pids = vec![monitor];
+    pids.extend(child.or_else(|| procs.children(monitor).first().copied()));
+    if pids.iter().all(|p| !procs.alive(*p)) {
+        return Stopped::NotRunning;
+    }
+    let asked = if wait_for_api {
+        api.lock()
+            .map(|mut a| a.shutdown().is_ok())
+            .unwrap_or(false)
+    } else {
+        api.try_lock()
+            .map(|mut a| a.shutdown().is_ok())
+            .unwrap_or(false)
+    };
+    if asked && gone(&pids, remaining(limits.stop_shutdown)) {
+        return Stopped::Shutdown(began.elapsed());
+    }
+    // The real Syncthing may only now be visible.
+    if let Some(c) = procs.children(monitor).first().copied() {
+        if !pids.contains(&c) {
+            pids.push(c);
+        }
+    }
+    if procs.alive(monitor) {
+        procs.signal(monitor, libc::SIGTERM, false);
+    }
+    if gone(&pids, remaining(limits.stop_shutdown + limits.stop_term)) {
+        return Stopped::Terminated(began.elapsed());
+    }
+    for &p in &pids[1..] {
+        if procs.alive(p) {
+            if procs.pgid(p) == Some(p) {
+                procs.signal(p, libc::SIGKILL, true);
+            }
+            procs.signal(p, libc::SIGKILL, false);
+        }
+    }
+    if procs.alive(monitor) {
+        procs.signal(monitor, libc::SIGKILL, false);
+    }
+    if gone(&pids, remaining(limits.stop_total())) {
+        Stopped::Killed(began.elapsed())
+    } else {
+        Stopped::Left(pids.iter().copied().filter(|p| procs.alive(*p)).collect())
+    }
+}
+
+fn log_stop(why: &str, outcome: &Stopped) {
+    match outcome {
+        Stopped::Shutdown(t) => eprintln!("slot: sync: stopped ({why}) in {} ms", t.as_millis()),
+        Stopped::Terminated(t) => eprintln!(
+            "slot: sync: stopped ({why}) by SIGTERM in {} ms (shutdown request did not finish)",
+            t.as_millis()
+        ),
+        Stopped::Killed(t) => eprintln!(
+            "slot: sync: KILLED ({why}) after {} ms: did not stop cleanly",
+            t.as_millis()
+        ),
+        Stopped::Left(p) => {
+            eprintln!("slot: sync: FAILED to stop ({why}): processes {p:?} still present")
+        }
+        Stopped::NotRunning => {}
+    }
 }
 
 impl Syncthing {
@@ -177,9 +259,8 @@ impl Syncthing {
         let (tx, rx) = channel();
         let shared = Arc::new(Shared {
             status: Mutex::new(SyncStatus::default()),
-            acks: Mutex::new(std::collections::HashSet::new()),
-            acked: Condvar::new(),
-            next_ack: AtomicU64::new(1),
+            gate: Mutex::new(Gate::default()),
+            procs: Mutex::new(procs.handle()),
         });
         let worker = Worker {
             layout,
@@ -190,9 +271,9 @@ impl Syncthing {
             tx: tx.clone(),
             run: None,
             want: false,
-            stopping: false,
             error: None,
             fails: 0,
+            floor_fails: 0,
             restarts: 0,
             user_restarts: Vec::new(),
             folders_at: None,
@@ -245,31 +326,51 @@ impl Syncthing {
             .unwrap_or_default()
     }
 
-    /// Before Restart or Power off: stop Syncthing within its limit (P2-5). Returns whether
-    /// it finished in time; power-off continues either way.
+    /// Before Restart or Power off: stop Syncthing within its 5 s limit (P2-5), here on the
+    /// calling thread, whatever the supervisor thread is doing (review M1). From now on
+    /// nothing starts again. Returns false only if a process could not be removed; power-off
+    /// continues either way.
     pub fn before_poweroff(&self) -> bool {
-        let id = self.shared.next_ack.fetch_add(1, Ordering::SeqCst);
-        self.send(Job::PowerOff(id));
-        let done = self
-            .shared
-            .wait_ack(id, self.limits.stop_total() + Duration::from_millis(500));
-        if !done {
-            eprintln!(
-                "slot: sync: stop took longer than {:?}; powering off anyway",
-                self.limits.stop_total()
-            );
-        }
-        done
+        let taken = match self.shared.gate.lock() {
+            Ok(mut g) => {
+                g.stopping = true;
+                g.run.take()
+            }
+            Err(_) => None,
+        };
+        self.send(Job::PowerOff);
+        let Some(info) = taken else {
+            return true;
+        };
+        let outcome = match self.shared.procs.lock() {
+            Ok(procs) => stop_staged(
+                procs.as_ref(),
+                &info.api,
+                info.monitor,
+                info.child,
+                &self.limits,
+                false,
+            ),
+            Err(_) => Stopped::Left(vec![info.monitor]),
+        };
+        log_stop("power-off", &outcome);
+        !matches!(outcome, Stopped::Left(_))
     }
 }
 
 struct Run {
     monitor: u32,
     child: Option<u32>,
-    api: Box<dyn Api>,
+    api: SharedApi,
     settings: Settings,
     started: Instant,
     healthy: bool,
+}
+
+impl Run {
+    fn api(&self) -> std::sync::MutexGuard<'_, Box<dyn Api>> {
+        self.api.lock().unwrap_or_else(|e| e.into_inner())
+    }
 }
 
 struct Worker {
@@ -282,10 +383,10 @@ struct Worker {
     run: Option<Run>,
     /// The toggle (and Wi-Fi) say Syncthing should run.
     want: bool,
-    /// Power-off has begun: nothing may start again.
-    stopping: bool,
     error: Option<String>,
     fails: u32,
+    /// Failed security floor repairs in a row (review M4).
+    floor_fails: u32,
     restarts: u32,
     user_restarts: Vec<Instant>,
     folders_at: Option<Instant>,
@@ -306,21 +407,32 @@ pub enum Stopped {
 
 impl Worker {
     fn run(mut self, rx: Receiver<Job>) {
+        // The next check is a deadline, so jobs arriving in between never push it back
+        // (review N5).
+        let mut next = Instant::now() + Duration::from_secs(3600);
         loop {
-            let wait = match &self.run {
+            let period = match &self.run {
                 Some(r) if !r.healthy => self.limits.starting_poll,
                 Some(_) => self.limits.health,
                 None => Duration::from_secs(3600),
             };
-            match rx.recv_timeout(wait) {
+            next = next.min(Instant::now() + period);
+            match rx.recv_timeout(next.saturating_duration_since(Instant::now())) {
                 Ok(job) => self.handle(job),
-                Err(RecvTimeoutError::Timeout) => self.check(),
+                Err(RecvTimeoutError::Timeout) => {
+                    self.check();
+                    next = Instant::now() + Duration::from_secs(3600);
+                }
                 Err(RecvTimeoutError::Disconnected) => {
                     self.stop("the app is closing");
                     return;
                 }
             }
         }
+    }
+
+    fn stopping(&self) -> bool {
+        self.shared.gate.lock().map(|g| g.stopping).unwrap_or(true)
     }
 
     fn handle(&mut self, job: Job) {
@@ -345,11 +457,10 @@ impl Worker {
             }
             Job::MenuOpened => self.menu_opened(),
             Job::Reset => self.reset(),
-            Job::PowerOff(id) => {
-                self.stopping = true;
+            Job::PowerOff => {
+                // The game thread has already stopped what was running (before_poweroff).
                 self.want = false;
                 self.stop("power-off");
-                self.shared.ack(id);
             }
             Job::Exited(pid, exit) => self.exited(pid, exit),
         }
@@ -389,12 +500,14 @@ impl Worker {
 
     /// Start (plan 3.3, 3.4, refinements 1, 3, 5).
     fn start(&mut self) {
-        if self.stopping || !self.want || self.run.is_some() {
+        if self.stopping() || !self.want || self.run.is_some() {
             return;
         }
         if !self.layout.program.is_file() {
             return self.fail("the Syncthing program is missing (System/syncthing)".into());
         }
+        // Before anything reads or edits the settings (review M6).
+        self.stop_leftovers();
         match config::found(&self.layout) {
             Found::Nothing => {
                 eprintln!("slot: sync: first setup");
@@ -447,34 +560,47 @@ impl Worker {
         };
         config::prepare_folders(&self.layout, &text);
         self.saved = creds::read(&self.layout.credentials);
-        self.stop_leftovers();
         let Some(api) = (self.make_api)(&self.layout, &settings) else {
             return self.fail(format!(
                 "web interface address not usable ({})",
                 settings.gui_address
             ));
         };
+        let api: SharedApi = Arc::new(Mutex::new(api));
         let tx = self.tx.clone();
         let args = process::serve_args(&self.layout.config, &self.layout.data, &self.layout.log);
         let env = process::env(&self.layout.dir);
-        let pid_cell: Arc<Mutex<u32>> = Arc::new(Mutex::new(0));
-        let cell = pid_cell.clone();
-        let spawned = self.procs.spawn(
-            &self.layout.program,
-            &args,
-            &env,
-            Box::new(move |exit| {
-                let pid = cell.lock().map(|p| *p).unwrap_or(0);
-                let _ = tx.send(Job::Exited(pid, exit));
-            }),
-        );
-        let monitor = match spawned {
-            Ok(pid) => pid,
-            Err(e) => return self.fail(format!("Syncthing could not start ({e})")),
+        // Under the gate: either power-off has begun and nothing starts, or the new
+        // processes are visible to the power-off stop.
+        let monitor = {
+            let Ok(mut gate) = self.shared.gate.lock() else {
+                return;
+            };
+            if gate.stopping {
+                return;
+            }
+            let spawned = self.procs.spawn(
+                &self.layout.program,
+                &args,
+                &env,
+                Box::new(move |pid, exit| {
+                    let _ = tx.send(Job::Exited(pid, exit));
+                }),
+            );
+            let monitor = match spawned {
+                Ok(pid) => pid,
+                Err(e) => {
+                    drop(gate);
+                    return self.fail(format!("Syncthing could not start ({e})"));
+                }
+            };
+            gate.run = Some(RunInfo {
+                monitor,
+                child: None,
+                api: api.clone(),
+            });
+            monitor
         };
-        if let Ok(mut p) = pid_cell.lock() {
-            *p = monitor;
-        }
         eprintln!("slot: sync: started (monitor pid {monitor})");
         self.error = None;
         self.folder_error = None;
@@ -528,79 +654,34 @@ impl Worker {
         }
     }
 
-    /// Bounded stop (P2-5, refinement 1).
+    /// Bounded stop (P2-5, refinement 1). If power-off already took the processes, they
+    /// were stopped on the game thread and there is nothing left to do here.
     fn stop(&mut self, why: &str) -> Stopped {
-        let Some(mut run) = self.run.take() else {
+        let Some(run) = self.run.take() else {
             self.publish();
             return Stopped::NotRunning;
         };
-        let began = Instant::now();
-        let mut pids = vec![run.monitor];
-        let child = run
-            .child
-            .or_else(|| self.procs.children(run.monitor).first().copied());
-        pids.extend(child);
-        let outcome = if run.api.shutdown().is_ok()
-            && self.wait_gone(&pids, self.remaining(began, self.limits.stop_shutdown))
-        {
-            Stopped::Shutdown(began.elapsed())
-        } else {
-            // The real Syncthing may only now be visible.
-            if let Some(c) = self.procs.children(run.monitor).first().copied() {
-                if !pids.contains(&c) {
-                    pids.push(c);
-                }
-            }
-            self.procs.signal(run.monitor, libc::SIGTERM, false);
-            let term_until = self.limits.stop_shutdown + self.limits.stop_term;
-            if self.wait_gone(&pids, self.remaining(began, term_until)) {
-                Stopped::Terminated(began.elapsed())
-            } else {
-                for &p in &pids[1..] {
-                    if let Some(g) = self.procs.pgid(p).filter(|g| *g == p) {
-                        self.procs.signal(g, libc::SIGKILL, true);
-                    }
-                    self.procs.signal(p, libc::SIGKILL, false);
-                }
-                self.procs.signal(run.monitor, libc::SIGKILL, false);
-                if self.wait_gone(&pids, self.remaining(began, self.limits.stop_total())) {
-                    Stopped::Killed(began.elapsed())
-                } else {
-                    Stopped::Left(
-                        pids.iter()
-                            .copied()
-                            .filter(|p| self.procs.alive(*p))
-                            .collect(),
-                    )
-                }
-            }
+        let ours = self
+            .shared
+            .gate
+            .lock()
+            .ok()
+            .and_then(|mut g| g.run.take_if(|i| i.monitor == run.monitor));
+        let outcome = match ours {
+            Some(info) => stop_staged(
+                self.procs.as_ref(),
+                &run.api,
+                run.monitor,
+                info.child.or(run.child),
+                &self.limits,
+                true,
+            ),
+            None => Stopped::NotRunning,
         };
-        match &outcome {
-            Stopped::Shutdown(t) => {
-                eprintln!("slot: sync: stopped ({why}) in {} ms", t.as_millis())
-            }
-            Stopped::Terminated(t) => eprintln!(
-                "slot: sync: stopped ({why}) by SIGTERM in {} ms (shutdown request did not finish)",
-                t.as_millis()
-            ),
-            Stopped::Killed(t) => eprintln!(
-                "slot: sync: KILLED ({why}) after {} ms: did not stop cleanly",
-                t.as_millis()
-            ),
-            Stopped::Left(p) => eprintln!(
-                "slot: sync: FAILED to stop ({why}): processes {p:?} still present after {} ms",
-                began.elapsed().as_millis()
-            ),
-            Stopped::NotRunning => {}
-        }
-        run.healthy = false;
+        log_stop(why, &outcome);
         self.folder_error = None;
         self.publish();
         outcome
-    }
-
-    fn remaining(&self, began: Instant, stage_end: Duration) -> Duration {
-        stage_end.saturating_sub(began.elapsed())
     }
 
     fn exited(&mut self, pid: u32, exit: Exit) {
@@ -609,6 +690,9 @@ impl Worker {
         };
         if run.monitor != pid {
             return;
+        }
+        if let Ok(mut g) = self.shared.gate.lock() {
+            g.run.take_if(|i| i.monitor == pid);
         }
         // Anything the monitor left behind goes too (it should have taken it with it).
         let child = run
@@ -664,12 +748,17 @@ impl Worker {
         let Some(run) = self.run.as_mut() else {
             return;
         };
-        let health = run.api.health();
+        let health = run.api().health();
         if !run.healthy {
             match health {
                 Health::Ok => {
                     run.healthy = true;
                     run.child = self.procs.children(run.monitor).first().copied();
+                    if let Ok(mut g) = self.shared.gate.lock() {
+                        if let Some(i) = g.run.as_mut().filter(|i| i.monitor == run.monitor) {
+                            i.child = run.child;
+                        }
+                    }
                     eprintln!(
                         "slot: sync: running (answered after {} ms)",
                         run.started.elapsed().as_millis()
@@ -697,6 +786,10 @@ impl Worker {
         match health {
             Health::Ok => {
                 self.fails = 0;
+                // A long healthy run forgets earlier restarts (review M4).
+                if run.started.elapsed() >= RESTARTS_FORGOTTEN_AFTER {
+                    self.restarts = 0;
+                }
                 self.floor_running();
                 if self
                     .folders_at
@@ -735,7 +828,8 @@ impl Worker {
         let Some(run) = self.run.as_mut() else {
             return;
         };
-        let gui = match run.api.gui() {
+        let gui = run.api().gui();
+        let gui = match gui {
             Ok(g) => g,
             Err(e) => {
                 eprintln!("slot: sync: web interface settings unreadable ({e})");
@@ -744,14 +838,27 @@ impl Worker {
         };
         let v = gui.violations();
         if v.is_empty() {
+            self.floor_fails = 0;
             return;
         }
         eprintln!("slot: sync: security floor: repairing {}", v.join(", "));
         if let Some(patch) = gui.floor_patch() {
-            if let Err(e) = run.api.patch_gui(&patch) {
-                eprintln!("slot: sync: security floor repair failed ({e}); restarting");
-                return self.restart_after_failure();
+            let patched = run.api().patch_gui(&patch);
+            if let Err(e) = patched {
+                // Like failed health checks (review M4): three in a row restart it, and the
+                // restart repairs the floor in the file.
+                self.floor_fails += 1;
+                eprintln!(
+                    "slot: sync: security floor repair failed ({}/{FAILS_BEFORE_RESTART}): {e}",
+                    self.floor_fails
+                );
+                if self.floor_fails >= FAILS_BEFORE_RESTART {
+                    self.floor_fails = 0;
+                    self.restart_after_failure();
+                }
+                return;
             }
+            self.floor_fails = 0;
         }
         if gui.hash.is_empty() {
             self.reset();
@@ -765,7 +872,7 @@ impl Worker {
         self.folders_at = Some(Instant::now());
         let mut problems = Vec::new();
         for id in [config::SAVES_ID, config::STATES_ID] {
-            match run.api.folder(id) {
+            match run.api().folder(id) {
                 Ok(Folder::State(s)) => {
                     if !s.error.is_empty() {
                         problems.push(format!("{id}: {}", s.error));
@@ -809,10 +916,14 @@ impl Worker {
             self.saved = creds::read(&self.layout.credentials);
         }
         let (user, hash) = match self.run.as_mut().filter(|r| r.healthy) {
-            Some(run) => match run.api.gui() {
-                Ok(g) => (g.user, g.hash),
-                Err(_) => return,
-            },
+            Some(run) => {
+                let gui = run.api().gui();
+                match gui {
+                    Ok(g) => (g.user, g.hash),
+                    // Unknown rather than a password that may have changed (review N3).
+                    Err(_) => return self.set_password(Shown::Unknown),
+                }
+            }
             None => match config::read(&self.layout) {
                 Ok(s) => (s.user, s.hash),
                 Err(_) => return self.set_password(Shown::Unknown),
@@ -833,11 +944,12 @@ impl Worker {
             Err(e) => return eprintln!("slot: sync: reset failed: no random source ({e})"),
         };
         let r = match self.run.as_mut().filter(|r| r.healthy) {
-            Some(run) => run
-                .api
-                .patch_gui(&reset_body(&pass))
-                .and_then(|()| run.api.gui())
-                .map(|g| g.hash),
+            Some(run) => {
+                let mut api = run.api();
+                api.patch_gui(&reset_body(&pass))
+                    .and_then(|()| api.gui())
+                    .map(|g| g.hash)
+            }
             None => {
                 if self.run.is_some() {
                     return eprintln!("slot: sync: reset not possible while Syncthing is starting");

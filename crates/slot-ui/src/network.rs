@@ -130,8 +130,9 @@ impl KeyboardView {
     }
 }
 
-/// What a Network screen shows. The face is rebuilt whenever this changes.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What a Network screen shows. The face is rebuilt whenever this changes. Its `Debug`
+/// output never contains the Web Interface password (review N7).
+#[derive(Clone, PartialEq, Eq)]
 pub enum NetView {
     Menu {
         rows: Vec<MenuRow>,
@@ -159,6 +160,74 @@ pub enum NetView {
         notes: Vec<String>,
         legend: Vec<(&'static str, &'static str)>,
     },
+}
+
+impl std::fmt::Debug for NetView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NetView::Menu {
+                rows,
+                selected,
+                status,
+            } => f
+                .debug_struct("Menu")
+                .field("rows", rows)
+                .field("selected", selected)
+                .field("status", status)
+                .finish(),
+            NetView::List {
+                rows,
+                selected,
+                note,
+                legend,
+            } => f
+                .debug_struct("List")
+                .field("rows", rows)
+                .field("selected", selected)
+                .field("note", note)
+                .field("legend", legend)
+                .finish(),
+            NetView::Keyboard(k) => f.debug_tuple("Keyboard").field(k).finish(),
+            NetView::Message {
+                title,
+                lines,
+                legend,
+            } => f
+                .debug_struct("Message")
+                .field("title", title)
+                .field("lines", lines)
+                .field("legend", legend)
+                .finish(),
+            NetView::Info {
+                title,
+                main,
+                pairs,
+                notes,
+                legend,
+            } => {
+                let shown: Vec<(&str, &str)> = pairs
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            *k,
+                            if *k == "Password" {
+                                "(hidden)"
+                            } else {
+                                v.as_str()
+                            },
+                        )
+                    })
+                    .collect();
+                f.debug_struct("Info")
+                    .field("title", title)
+                    .field("main", main)
+                    .field("pairs", &shown)
+                    .field("notes", notes)
+                    .field("legend", legend)
+                    .finish()
+            }
+        }
+    }
 }
 
 struct Canvas {
@@ -818,6 +887,18 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn debug_output_never_contains_the_web_interface_password() {
+        let v = NetView::Info {
+            title: "Web Interface",
+            main: "https://192.168.4.162:8384".into(),
+            pairs: vec![("Password", "secret words here".into())],
+            notes: vec![],
+            legend: vec![],
+        };
+        assert!(!format!("{v:?}").contains("secret"));
     }
 
     #[test]

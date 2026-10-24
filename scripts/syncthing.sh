@@ -15,7 +15,13 @@ ARCHIVE_SHA256=f054de02462d5d58bd126908f2f92b63aba74f162a5be85e50e96d656e7db47d
 PROGRAM_SHA256=68d16bb03d9568189cd39a79c32767bba75bd750c612968b3db4d9d6174c1d3a
 LICENSE_SHA256=3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04
 
-sha() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1 || shasum -a 256 "$1" | cut -d' ' -f1; }
+sha() {
+	if command -v sha256sum > /dev/null 2>&1; then
+		sha256sum "$1" | cut -d' ' -f1
+	else
+		shasum -a 256 "$1" | cut -d' ' -f1
+	fi
+}
 
 check() {
 	got="$(sha "$1")"
