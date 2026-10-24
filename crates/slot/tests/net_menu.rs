@@ -603,7 +603,14 @@ fn the_web_interface_screen_shows_the_address_user_and_password() {
                 ]
             );
             assert!(legend.contains(&("Y", "Reset")));
-            assert!(notes.iter().any(|n| n.contains("certificate")));
+            assert_eq!(
+                notes,
+                [
+                    "Open it in a browser on a phone or computer on the same Wi-Fi.",
+                    "The browser warns about this handheld's self-signed certificate.",
+                    "That is expected here: accept it for this address only.",
+                ]
+            );
         }
         v => panic!("{v:?}"),
     }

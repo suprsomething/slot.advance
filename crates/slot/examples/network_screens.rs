@@ -18,6 +18,8 @@ struct Fake {
     running: bool,
     link: Link,
     sync: Option<SyncStatus>,
+    seen: Vec<slot_net::Seen>,
+    saved: Vec<Vec<u8>>,
 }
 
 impl Net for Fake {
@@ -27,6 +29,8 @@ impl Net for Fake {
     fn status(&self) -> Option<Status> {
         Some(Status {
             link: self.link.clone(),
+            seen: self.seen.clone(),
+            saved: self.saved.clone(),
             ..Status::default()
         })
     }
@@ -83,6 +87,8 @@ fn main() {
         running: false,
         link: Link::Off,
         sync: None,
+        seen: vec![],
+        saved: vec![],
     };
     save(
         &shot(&mut off, false, false, &[]),
@@ -93,6 +99,8 @@ fn main() {
         running: true,
         link: connected(),
         sync: Some(SyncStatus::default()),
+        seen: vec![],
+        saved: vec![],
     };
     save(
         &shot(&mut on_sync_off, true, false, &[Btn::Down, Btn::Down]),
@@ -103,6 +111,8 @@ fn main() {
         running: true,
         link: connected(),
         sync: running(pw.clone()),
+        seen: vec![],
+        saved: vec![],
     };
     save(
         &shot(&mut on, true, true, &[Btn::Down, Btn::Down]),
@@ -148,6 +158,45 @@ fn main() {
     save(
         &shot(&mut starting, true, true, &web),
         &out.join("18-web-interface-starting.png"),
+    );
+    // The network list: names, signal and lock centred in their rows.
+    let mut list = on.clone();
+    list.saved = vec![b"DropBearNet".to_vec(), b"Office".to_vec()];
+    list.seen = vec![
+        slot_net::Seen {
+            ssid: b"DropBearNet".to_vec(),
+            signal: -45,
+            security: slot_net::Security::Wpa2,
+        },
+        slot_net::Seen {
+            ssid: b"Neighbour".to_vec(),
+            signal: -63,
+            security: slot_net::Security::Wpa2,
+        },
+        slot_net::Seen {
+            ssid: b"Cafe".to_vec(),
+            signal: -71,
+            security: slot_net::Security::Open,
+        },
+    ];
+    save(
+        &shot(&mut list, true, true, &[Btn::Down, Btn::A]),
+        &out.join("20-networks-list.png"),
+    );
+    // The widest possible passphrase in pixels: the five widest EFF words, measured in the
+    // label font at 24 px (the longest by letters is narrower).
+    let longest = "mammogram womanhood amendment endowment commodore".to_string();
+    let words = slot_net::sync::creds::wordlist();
+    assert!(longest.split(' ').all(|w| words.contains(&w)));
+    println!(
+        "longest passphrase: {longest} ({} characters)",
+        longest.len()
+    );
+    let mut long = on.clone();
+    long.sync = running(Shown::Password(longest));
+    save(
+        &shot(&mut long, true, true, &web),
+        &out.join("21-web-interface-longest.png"),
     );
     let mut reset = web.to_vec();
     reset.push(Btn::Y);

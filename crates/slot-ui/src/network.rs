@@ -586,6 +586,27 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
     c.legend(&legend);
 }
 
+/// Where the Web Interface screen's labels end and its values begin: far enough left that
+/// the widest possible passphrase (five EFF words) fits on two lines at full size.
+const INFO_COLUMN: f32 = 196.0;
+const INFO_LINE: f32 = 32.0;
+const INFO_PAIR_GAP: f32 = 12.0;
+
+/// `text` split into lines no wider than `max_w` at `px`, breaking only between words.
+fn wrap_words(c: &Canvas, text: &str, px: f32, max_w: f32) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split(' ') {
+        match lines.last_mut() {
+            Some(l) if c.measure(&format!("{l} {word}"), px, false) <= max_w => {
+                l.push(' ');
+                l.push_str(word);
+            }
+            _ => lines.push(word.to_string()),
+        }
+    }
+    lines
+}
+
 fn draw_info(
     c: &mut Canvas,
     title: &str,
@@ -596,25 +617,30 @@ fn draw_info(
 ) {
     c.centred(40.0, title, 22.0, DIM, true);
     c.centred(104.0, main, 28.0, MENU_INK, false);
-    // Labels right-aligned to a centre line, values left-aligned after it.
-    let mid = 250.0;
-    let mut y = 176.0;
+    // Labels right-aligned to the column, values left-aligned after it. A value too wide
+    // for one line wraps between words with a hanging indent: every line starts at the
+    // column, and the label stays on the first line only.
+    let max_w = OUT_W as f32 - EDGE_X - INFO_COLUMN;
+    let mut y = 172.0;
     for (label, value) in pairs {
         let w = c.measure(label, STATUS_PX, true);
-        c.print(mid - 16.0 - w, y + 3.0, label, STATUS_PX, DIM, true);
-        c.print_fit(
-            mid,
-            y,
-            value,
-            LIST_PX,
-            STATUS_PX,
-            OUT_W as f32 - EDGE_X - mid,
-            MENU_INK,
-            false,
-        );
-        y += 44.0;
+        c.print(INFO_COLUMN - 16.0 - w, y + 3.0, label, STATUS_PX, DIM, true);
+        for line in wrap_words(c, value, LIST_PX, max_w) {
+            c.print_fit(
+                INFO_COLUMN,
+                y,
+                &line,
+                LIST_PX,
+                STATUS_PX,
+                max_w,
+                MENU_INK,
+                false,
+            );
+            y += INFO_LINE;
+        }
+        y += INFO_PAIR_GAP;
     }
-    let mut y = y.max(276.0) + 16.0;
+    let mut y = y.max(276.0) + 14.0;
     for line in notes {
         c.centred(y, line, NOTE_PX + 1.0, DIM, false);
         y += 26.0;
@@ -992,6 +1018,118 @@ mod tests {
             vec![],
         );
         assert_eq!(value_ink(&greyed, 3), dim);
+    }
+
+    fn info(pairs: Vec<(&'static str, String)>, notes: Vec<String>) -> UndoFace {
+        net_face(&NetView::Info {
+            title: "Web Interface",
+            main: "https://192.168.4.162:8384".into(),
+            pairs,
+            notes,
+            legend: vec![("B", "Back"), ("Y", "Reset")],
+        })
+    }
+
+    /// Leftmost and rightmost bright (value) ink between rows y0 and y1.
+    fn value_span(f: &UndoFace, y0: u32, y1: u32) -> Option<(u32, u32)> {
+        let mut span: Option<(u32, u32)> = None;
+        for y in y0..y1 {
+            for x in 0..f.w {
+                let at = ((y * f.w + x) * 4) as usize;
+                let p = &f.rgba[at..at + 3];
+                if p.iter().zip(MENU_INK).all(|(&a, b)| a.abs_diff(b) < 40) {
+                    span = Some(match span {
+                        Some((l, r)) => (l.min(x), r.max(x)),
+                        None => (x, x),
+                    });
+                }
+            }
+        }
+        span
+    }
+
+    #[test]
+    fn every_possible_passphrase_fits_on_two_full_size_lines() {
+        // Greedy wrapping puts at least two words on the first line and the rest on the
+        // second as long as any three words fit on one line, so the three widest words
+        // (by pixels, at the size drawn) decide it for all 7,776^5 passphrases.
+        let c = Canvas::new();
+        let max_w = OUT_W as f32 - EDGE_X - INFO_COLUMN;
+        let list = include_str!("../../slot-net/src/sync/eff_large_wordlist.txt");
+        let mut words: Vec<(f32, &str)> = list
+            .lines()
+            .filter_map(|l| l.split('\t').nth(1))
+            .map(|w| (c.measure(w, LIST_PX, false), w))
+            .collect();
+        assert_eq!(words.len(), 7776);
+        words.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let widest3 = format!("{} {} {}", words[0].1, words[1].1, words[2].1);
+        assert!(c.measure(&widest3, LIST_PX, false) <= max_w, "{widest3}");
+        let widest5 = format!("{widest3} {} {}", words[3].1, words[4].1);
+        let lines = wrap_words(&c, &widest5, LIST_PX, max_w);
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert_eq!(lines.join(" "), widest5, "never split inside a word");
+        for l in &lines {
+            assert!(c.measure(l, LIST_PX, false) <= max_w, "shrunk or cut: {l}");
+        }
+    }
+
+    #[test]
+    fn a_wrapped_passphrase_hangs_under_its_first_word() {
+        let pw = "mammogram womanhood amendment endowment commodore";
+        let f = info(
+            vec![("User", "slotadvance".into()), ("Password", pw.into())],
+            vec![
+                "Open it in a browser on a phone or computer on the same Wi-Fi.".into(),
+                "The browser warns about this handheld's self-signed certificate.".into(),
+                "That is expected here: accept it for this address only.".into(),
+            ],
+        );
+        // User at y 172, Password's lines at 216 and 248 (32 apart).
+        let user = value_span(&f, 172, 204).unwrap();
+        let first = value_span(&f, 216, 246).unwrap();
+        let second = value_span(&f, 248, 278).unwrap();
+        // Both lines and the user name start at the column (glyph side bearing aside).
+        for (l, _) in [user, first, second] {
+            assert!(
+                (INFO_COLUMN as u32..INFO_COLUMN as u32 + 4).contains(&l),
+                "{l}"
+            );
+        }
+        assert!(first.0.abs_diff(second.0) <= 2, "{first:?} {second:?}");
+        assert!(first.1 <= OUT_W - EDGE_X as u32 && second.1 <= OUT_W - EDGE_X as u32);
+        // No third line.
+        assert_eq!(value_span(&f, 280, 300), None);
+        // Labels right-aligned, ending 16 px before the column, on the first line only.
+        let dim_right = |y0: u32, y1: u32| {
+            let mut r = 0;
+            for y in y0..y1 {
+                for x in 0..INFO_COLUMN as u32 {
+                    let at = ((y * f.w + x) * 4) as usize;
+                    if f.rgba[at..at + 3]
+                        .iter()
+                        .zip(DIM)
+                        .all(|(&a, b)| a.abs_diff(b) < 20)
+                    {
+                        r = r.max(x);
+                    }
+                }
+            }
+            r
+        };
+        let (u, p) = (dim_right(172, 204), dim_right(216, 246));
+        assert!(u.abs_diff(p) <= 2 && u < INFO_COLUMN as u32 - 12, "{u} {p}");
+        assert_eq!(dim_right(250, 278), 0, "PASSWORD on the first line only");
+        // The three notes end clear of the legend.
+        let legend_top = LEGEND_Y;
+        let ink = ink_rows(&f, 300, OUT_H);
+        let notes_end = ink
+            .iter()
+            .copied()
+            .filter(|&y| y < legend_top)
+            .max()
+            .unwrap();
+        assert!(notes_end + 10 < legend_top, "{notes_end}");
     }
 
     #[test]

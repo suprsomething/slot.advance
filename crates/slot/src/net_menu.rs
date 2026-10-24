@@ -612,9 +612,8 @@ fn web_interface(net: &dyn Net) -> NetView {
     let mut notes = Vec::new();
     if addr.is_some() && sync.service == Service::Running {
         notes.push("Open it in a browser on a phone or computer on the same Wi-Fi.".to_string());
-        notes.push(
-            "The browser warns about the certificate the first time. That is expected.".to_string(),
-        );
+        notes.push("The browser warns about this handheld's self-signed certificate.".to_string());
+        notes.push("That is expected here: accept it for this address only.".to_string());
     }
     let mut legend = vec![("B", "Back")];
     if sync.service == Service::Running {
