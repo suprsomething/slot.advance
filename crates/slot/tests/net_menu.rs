@@ -563,7 +563,12 @@ fn the_service_row_is_read_only_and_skipped() {
     ] {
         t.net.s().sync.as_mut().unwrap().service = service;
         match t.view() {
-            NetView::Menu { rows, .. } => assert_eq!(rows[3].value.as_deref(), Some(word)),
+            NetView::Menu { rows, .. } => {
+                assert_eq!(rows[3].value.as_deref(), Some(word));
+                // Only Error stands out; Running and Stopped stay subdued.
+                assert_eq!(rows[3].emphasis, service == Service::Error, "{word}");
+                assert!(rows.iter().enumerate().all(|(i, r)| i == 3 || !r.emphasis));
+            }
             v => panic!("{v:?}"),
         }
     }

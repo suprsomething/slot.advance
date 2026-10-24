@@ -46,6 +46,8 @@ pub struct MenuRow {
     pub selectable: bool,
     /// Drawn greyed out (unavailable).
     pub greyed: bool,
+    /// Its value drawn in the bright menu ink even when not lit (Service: Error).
+    pub emphasis: bool,
 }
 
 impl MenuRow {
@@ -57,6 +59,7 @@ impl MenuRow {
             changes: true,
             selectable: true,
             greyed: false,
+            emphasis: false,
         }
     }
 
@@ -68,6 +71,7 @@ impl MenuRow {
             changes: false,
             selectable: true,
             greyed: false,
+            emphasis: false,
         }
     }
 
@@ -79,6 +83,15 @@ impl MenuRow {
             changes: false,
             selectable: false,
             greyed: false,
+            emphasis: false,
+        }
+    }
+
+    /// Its value stands out: bright instead of the subdued grey (Service: Error).
+    pub fn emphasised(self) -> MenuRow {
+        MenuRow {
+            emphasis: true,
+            ..self
         }
     }
 
@@ -536,7 +549,11 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
             true,
         );
         if let Some(v) = &row.value {
-            let ink = if lit { MENU_INK } else { DIM };
+            let ink = if lit || (row.emphasis && !row.greyed) {
+                MENU_INK
+            } else {
+                DIM
+            };
             let right = OUT_W as f32 - EDGE_X;
             let w = c.measure(v, MENU_PX, true);
             if lit && row.changes {
@@ -933,6 +950,48 @@ mod tests {
             selected: 0,
             status,
         })
+    }
+
+    /// The brightest ink in the value column (right half) of the given row.
+    fn value_ink(f: &UndoFace, row: usize) -> u32 {
+        let y0 = (MENU_TOP + PITCH * row as f32) as u32;
+        let mut best = 0;
+        for y in y0..y0 + PITCH as u32 {
+            for x in f.w / 2..f.w {
+                let at = ((y * f.w + x) * 4) as usize;
+                let p = &f.rgba[at..at + 3];
+                best = best.max(p[0] as u32 + p[1] as u32 + p[2] as u32);
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn an_emphasised_value_is_drawn_bright_and_others_subdued() {
+        let rows = |service: MenuRow| {
+            vec![
+                MenuRow::setting("Wi-Fi", "On"),
+                MenuRow::opens("Networks"),
+                MenuRow::setting("Syncthing", "On"),
+                service,
+                MenuRow::opens("Web Interface"),
+            ]
+        };
+        let error = menu(
+            rows(MenuRow::shows("Service", "Error").emphasised()),
+            vec![],
+        );
+        let running = menu(rows(MenuRow::shows("Service", "Running")), vec![]);
+        let bright = MENU_INK.iter().map(|&v| v as u32).sum::<u32>();
+        let dim = DIM.iter().map(|&v| v as u32).sum::<u32>();
+        assert_eq!(value_ink(&error, 3), bright);
+        assert_eq!(value_ink(&running, 3), dim);
+        // Greyed wins over emphasis: an unavailable row never stands out.
+        let greyed = menu(
+            rows(MenuRow::shows("Service", "Error").emphasised().greyed()),
+            vec![],
+        );
+        assert_eq!(value_ink(&greyed, 3), dim);
     }
 
     #[test]

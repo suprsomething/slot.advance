@@ -170,7 +170,13 @@ impl NetMenu {
             Some(st) => {
                 rows.push((Row::Syncthing, toggle));
                 if sync {
-                    rows.push((Row::Service, MenuRow::shows("Service", service_word(st))));
+                    let service = MenuRow::shows("Service", service_word(st));
+                    let service = if st.service == Service::Error {
+                        service.emphasised()
+                    } else {
+                        service
+                    };
+                    rows.push((Row::Service, service));
                     rows.push((Row::WebInterface, MenuRow::opens("Web Interface")));
                 }
             }
