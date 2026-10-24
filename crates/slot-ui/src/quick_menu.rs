@@ -22,10 +22,12 @@ pub enum QuickRow {
     GbPalettes,
     Sleep,
     Titles,
+    /// Wi-Fi (0.5.0), opening the Network menu.
+    Network,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 16] = [
+    pub const ALL: [QuickRow; 17] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -42,11 +44,13 @@ impl QuickRow {
         QuickRow::GbPalettes,
         QuickRow::Sleep,
         QuickRow::Titles,
+        QuickRow::Network,
     ];
 
-    pub const MAIN: [QuickRow; 5] = [
+    pub const MAIN: [QuickRow; 6] = [
         QuickRow::Screen,
         QuickRow::Game,
+        QuickRow::Network,
         QuickRow::Sleep,
         QuickRow::DateTime,
         QuickRow::About,
@@ -128,13 +132,18 @@ impl QuickRow {
             QuickRow::GbPalettes => "GB Palettes",
             QuickRow::Sleep => "Sleep",
             QuickRow::Titles => "Show Game Titles",
+            QuickRow::Network => "Network",
         }
     }
 
     pub fn opens(self) -> bool {
         matches!(
             self,
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game
+            QuickRow::DateTime
+                | QuickRow::About
+                | QuickRow::Screen
+                | QuickRow::Game
+                | QuickRow::Network
         )
     }
 

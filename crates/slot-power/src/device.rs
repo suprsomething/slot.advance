@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::unload::DriverUnload;
 use crate::{Battery, Charge, LedState, Platform, SleepPaths, Woke};
 
 const TOP_STEP: u32 = 9;
@@ -167,6 +168,20 @@ impl DevicePlatform {
             let _ = writeln!(f, "{} {line}", self.now());
             let _ = f.sync_all();
         }
+    }
+
+    /// Restart and Power off only: the games card is already synced. Takes the Wi-Fi
+    /// driver out (bounded, see `unload.rs`), records exactly what happened, then syncs
+    /// again so the record is on the card before `reboot` or `poweroff`.
+    fn unload_wifi_before(&self, what: &str) {
+        self.breadcrumb(&format!(
+            "{what}: first sync returned, checking the Wi-Fi driver"
+        ));
+        let result = DriverUnload::device().run();
+        let line = result.describe();
+        eprintln!("slot: {what}: {line}");
+        self.breadcrumb(&format!("{what}: {line}"));
+        let _ = Command::new("sync").status();
     }
 
     pub fn trace_boot(&self) {
@@ -479,6 +494,7 @@ impl Platform for DevicePlatform {
     fn restart(&mut self) -> ! {
         self.breadcrumb("restart: reached slot, about to sync");
         let _ = Command::new("sync").status();
+        self.unload_wifi_before("restart");
         self.breadcrumb("restart: sync returned, about to signal init");
         let _ = Command::new("reboot").status();
         std::thread::sleep(Duration::from_secs(10));
@@ -488,6 +504,7 @@ impl Platform for DevicePlatform {
     fn poweroff(&mut self) -> ! {
         self.breadcrumb("poweroff: reached slot, about to sync");
         let _ = Command::new("sync").status();
+        self.unload_wifi_before("poweroff");
         self.breadcrumb("poweroff: sync returned, about to signal init");
         let _ = Command::new("poweroff").status();
         self.breadcrumb("poweroff: signalled init, waiting for it to take the machine down");

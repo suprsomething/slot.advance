@@ -120,6 +120,9 @@ pub fn run() {
     platform.arm_sleep();
     let keep_wifi = slot_store::read_slot_state(&root).wifi;
     quiet_hardware(Quiet::device(keep_wifi));
+    // Wi-Fi On (0.5.0): the driver stays loaded (above) and saved networks are joined in
+    // the background. Wi-Fi Off starts nothing here.
+    let net = keep_wifi.then(|| slot_net::NetJobs::spawn(slot_net::wifi::device(&root)));
     platform.trace_boot();
     slot::boot_time::mark("platform");
     let sink = match audio.map(|h| h.join()) {
@@ -128,6 +131,10 @@ pub fn run() {
     };
     slot::boot_time::mark("audio");
     let mut frontend = Frontend::boot_with(Box::new(platform), sink);
+    if let Some(jobs) = net {
+        slot_net::set_global(&jobs);
+        frontend.set_net(Box::new(slot::net::WifiOn::new(jobs)));
+    }
     slot::boot_time::mark("frontend");
     frontend.upload_boot_faces(&mut compositor);
     slot::boot_time::mark("faces");

@@ -58,6 +58,14 @@ pub struct Frontend {
     clocks: Clocks,
     about: AboutFace,
     quick_clock: QuickClock,
+    net: NetFace,
+}
+
+/// The Network screen's face and what it was last drawn from (0.5.0).
+#[derive(Default)]
+struct NetFace {
+    tex: Option<TexId>,
+    shown: Option<slot_ui::NetView>,
 }
 
 #[derive(Default)]
@@ -145,6 +153,7 @@ impl Frontend {
             clocks: Clocks::default(),
             about: AboutFace::default(),
             quick_clock: QuickClock::default(),
+            net: NetFace::default(),
         }
     }
 
@@ -368,6 +377,7 @@ impl Frontend {
         self.title_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
+        sync_net(self.session.app_mut(), compositor, &mut self.net);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_core_picker(
             self.session.app_mut(),
@@ -566,6 +576,11 @@ impl Frontend {
 
     pub fn poweroff(&mut self) {
         self.session.app_mut().poweroff();
+    }
+
+    /// Wi-Fi On (0.5.0): hands the app its network thread.
+    pub fn set_net(&mut self, net: Box<dyn crate::net::Net>) {
+        self.session.app_mut().set_net(net);
     }
 }
 
@@ -808,6 +823,20 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     });
     let id = upload(compositor, &mut state.tex, face);
     app.set_about_face(id);
+}
+
+fn sync_net(app: &mut App, compositor: &mut Compositor, state: &mut NetFace) {
+    let Some(view) = app.net_view() else {
+        state.shown = None;
+        return;
+    };
+    if state.tex.is_some() && state.shown.as_ref() == Some(&view) {
+        return;
+    }
+    let face = slot_ui::net_face(&view);
+    let id = upload(compositor, &mut state.tex, face);
+    app.set_net_face(id);
+    state.shown = Some(view);
 }
 
 fn sync_core_picker(

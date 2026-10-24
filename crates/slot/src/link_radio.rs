@@ -110,6 +110,13 @@ fn run(sub: &str) -> bool {
 
 #[cfg(feature = "device")]
 pub fn up(role: LinkRole, cancel: &Cancel) -> Result<(), RadioFail> {
+    // Wi-Fi On (0.5.0): SlotLink takes the radio explicitly; slot.advance's own supplicant
+    // is stopped first (requirement 7). Returns at once with Wi-Fi Off.
+    if !slot_net::hand_over_for_link() {
+        eprintln!(
+            "slot: link: the home network did not hand the radio over in time; trying anyway"
+        );
+    }
     let mut child = link(role.arg())
         .spawn()
         .map_err(|e| RadioFail::Radio(format!("link {} would not start: {e}", role.arg())))?;
@@ -137,6 +144,8 @@ pub fn up(role: LinkRole, cancel: &Cancel) -> Result<(), RadioFail> {
 #[cfg(feature = "device")]
 pub fn down() {
     let _ = link("down").status();
+    // Wi-Fi On: back to the home network (or quiet, if the handheld is asleep).
+    slot_net::take_back_after_link();
 }
 
 #[cfg(not(feature = "device"))]
