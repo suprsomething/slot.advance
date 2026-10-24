@@ -28,6 +28,11 @@ const LIST_ROWS: usize = 6;
 /// are centred in the lit bar (to within half a pixel). The arrows keep their own place
 /// (`y + 6`), which already centres them.
 const MENU_TEXT_DY: f32 = 1.0;
+/// The network list's name and icon offsets within a row. Measured (25 Oct 2026): at 8 and
+/// 16 px the names sat 2 px low and the signal and lock icons 2 px high; at 6 and 18 both
+/// are centred in the bar (names measured on letters without descenders).
+const LIST_NAME_DY: f32 = 6.0;
+const LIST_ICON_DY: f32 = 18.0;
 
 /// One row of the Network menu.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -625,12 +630,12 @@ fn draw_list(
         let mut x = right;
         if let Some(b) = row.bars {
             x -= 20.0;
-            c.bars(x, y + 16.0, b, ink);
+            c.bars(x, y + LIST_ICON_DY, b, ink);
         }
         x -= 10.0;
         if row.locked {
             x -= 12.0;
-            c.lock(x, y + 16.0, ink);
+            c.lock(x, y + LIST_ICON_DY, ink);
             x -= 10.0;
         }
         if let Some(tag) = row.tag {
@@ -641,7 +646,7 @@ fn draw_list(
         }
         c.print_fit(
             EDGE_X,
-            y + 8.0,
+            y + LIST_NAME_DY,
             &row.name,
             LIST_PX,
             16.0,
@@ -999,6 +1004,30 @@ mod tests {
             })
             .collect();
         assert!(xs[0] >= EDGE_X as u32 && *xs.last().unwrap() <= OUT_W - EDGE_X as u32);
+    }
+
+    #[test]
+    fn network_names_and_icons_are_centred_in_the_list_rows() {
+        let f = net_face(&NetView::List {
+            rows: vec![ListRow {
+                name: "Cafe".into(),
+                bars: Some(2),
+                locked: true,
+                tag: Some("Saved"),
+            }],
+            selected: 0,
+            note: None,
+            legend: vec![],
+        });
+        // "Cafe" has no descenders, so its ink is the letters themselves.
+        for (x0, x1, what) in [(20, 120, "name"), (640, 700, "icons")] {
+            let ((top, bottom), (bar_top, bar_bottom)) = ink_and_bar(&f, x0, x1);
+            let off = (top + bottom) as f32 / 2.0 - (bar_top + bar_bottom) as f32 / 2.0;
+            assert!(
+                off.abs() <= 1.0,
+                "{what}: ink {top}..{bottom}, bar {bar_top}..{bar_bottom}, {off} px"
+            );
+        }
     }
 
     #[test]
