@@ -383,6 +383,22 @@ impl Canvas {
         );
     }
 
+    /// Centred on one line at `px`, shortened with "..." if it would not fit between the
+    /// margins (no shrinking).
+    fn centred_truncated(&mut self, y: f32, s: &str, px: f32, c: [u8; 3]) {
+        let max_w = self.w as f32 - 2.0 * EDGE_X;
+        let mut text = s.to_string();
+        if self.measure(&text, px, false) > max_w {
+            let mut cut: String = s.to_string();
+            while !cut.is_empty() && self.measure(&format!("{cut}..."), px, false) > max_w {
+                cut.pop();
+            }
+            text = format!("{}...", cut.trim_end());
+        }
+        let w = self.measure(&text, px, false);
+        self.print((self.w as f32 - w) / 2.0, y, &text, px, c, false);
+    }
+
     fn blit(&mut self, face: &UndoFace, x: u32, y: u32) {
         for row in 0..face.h {
             for col in 0..face.w {
@@ -486,27 +502,18 @@ pub fn net_face(view: &NetView) -> UndoFace {
     c.face()
 }
 
-/// Where the first menu row sits: as in phase 1 for up to three rows; higher for the five
-/// rows with Syncthing On, so two status lines still fit above the legend.
-fn menu_top(rows: usize) -> f32 {
-    if rows <= 3 {
-        120.0
-    } else {
-        76.0
-    }
-}
-
-/// The gap between the last row and the status lines (smaller with five rows).
-fn status_gap(rows: usize) -> f32 {
-    if rows <= 3 {
-        28.0
-    } else {
-        16.0
-    }
-}
+/// Where the first menu row sits: the same in every state (two, three or five rows), so
+/// switching Syncthing On or Off adds or removes rows below without moving the rows above
+/// (approved by Dean, 25 Oct 2026). The highest position that still leaves two status lines
+/// clear of the legend with five rows.
+pub const MENU_TOP: f32 = 84.0;
+/// From the last row to the first status line.
+const STATUS_GAP: f32 = 20.0;
+/// At most this many status lines under the menu; each is one line, never wrapped.
+pub const STATUS_LINES: usize = 2;
 
 fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String]) {
-    let top = menu_top(rows.len());
+    let top = MENU_TOP;
     c.centred(40.0, "Network", 22.0, DIM, true);
     for (i, row) in rows.iter().enumerate() {
         let y = top + PITCH * i as f32;
@@ -539,9 +546,11 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
             }
         }
     }
-    let mut y = top + PITCH * rows.len() as f32 + status_gap(rows.len());
-    for line in status {
-        c.centred(y, line, STATUS_PX, DIM, false);
+    let mut y = top + PITCH * rows.len() as f32 + STATUS_GAP;
+    for line in status.iter().take(STATUS_LINES) {
+        // One line each, at full size: a long network name is shortened with "...", never
+        // shrunk or wrapped (the stored name is unchanged).
+        c.centred_truncated(y, line, STATUS_PX, DIM);
         y += 28.0;
     }
     let mut legend = vec![("B", "Back")];
@@ -899,6 +908,97 @@ mod tests {
             legend: vec![],
         };
         assert!(!format!("{v:?}").contains("secret"));
+    }
+
+    fn ink_rows(f: &UndoFace, y0: u32, y1: u32) -> Vec<u32> {
+        let bg = theme().opening;
+        (y0..y1)
+            .filter(|&y| {
+                (0..f.w).any(|x| {
+                    let at = ((y * f.w + x) * 4) as usize;
+                    f.rgba[at..at + 3] != bg
+                })
+            })
+            .collect()
+    }
+
+    fn menu(rows: Vec<MenuRow>, status: Vec<String>) -> UndoFace {
+        net_face(&NetView::Menu {
+            rows,
+            selected: 0,
+            status,
+        })
+    }
+
+    #[test]
+    fn the_first_row_stays_put_as_rows_are_added() {
+        let two = vec![
+            MenuRow::setting("Wi-Fi", "Off"),
+            MenuRow::setting("Syncthing", "Off").greyed(),
+        ];
+        let three = vec![
+            MenuRow::setting("Wi-Fi", "On"),
+            MenuRow::opens("Networks"),
+            MenuRow::setting("Syncthing", "Off"),
+        ];
+        let five = vec![
+            MenuRow::setting("Wi-Fi", "On"),
+            MenuRow::opens("Networks"),
+            MenuRow::setting("Syncthing", "On"),
+            MenuRow::shows("Service", "Running"),
+            MenuRow::opens("Web Interface"),
+        ];
+        let first_bar = |rows: Vec<MenuRow>| {
+            let f = menu(rows, vec![]);
+            let edge = theme().edge;
+            (0..f.h)
+                .find(|&y| {
+                    let at = ((y * f.w + 2) * 4) as usize;
+                    f.rgba[at..at + 3] == edge
+                })
+                .unwrap()
+        };
+        let y = first_bar(two);
+        assert_eq!(y, first_bar(three));
+        assert_eq!(y, first_bar(five));
+        assert_eq!(y, (MENU_TOP + 4.0) as u32);
+    }
+
+    #[test]
+    fn a_long_network_name_never_adds_lines_or_reaches_the_legend() {
+        let five = || {
+            vec![
+                MenuRow::setting("Wi-Fi", "On"),
+                MenuRow::opens("Networks"),
+                MenuRow::setting("Syncthing", "On"),
+                MenuRow::shows("Service", "Running"),
+                MenuRow::opens("Web Interface"),
+            ]
+        };
+        let wide = "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"; // 32 bytes, the widest a name can be
+        let f = menu(
+            five(),
+            vec![
+                format!("Connected to {wide}"),
+                "192.168.100.200".into(),
+                "an unexpected third line".into(),
+            ],
+        );
+        let rows = ink_rows(&f, (MENU_TOP + PITCH * 5.0) as u32, LEGEND_Y);
+        // Two lines of text (each a run of rows), ending clear of the legend.
+        let runs = rows.windows(2).filter(|w| w[1] > w[0] + 1).count() + 1;
+        assert_eq!(runs, 2, "{rows:?}");
+        assert!(*rows.last().unwrap() + 8 < LEGEND_Y, "{rows:?}");
+        // At full size, shortened: the line stays inside the margins.
+        let bg = theme().opening;
+        let first = rows[0];
+        let xs: Vec<u32> = (0..f.w)
+            .filter(|&x| {
+                let at = ((first * f.w + x) * 4) as usize;
+                f.rgba[at..at + 3] != bg
+            })
+            .collect();
+        assert!(xs[0] >= EDGE_X as u32 && *xs.last().unwrap() <= OUT_W - EDGE_X as u32);
     }
 
     #[test]
