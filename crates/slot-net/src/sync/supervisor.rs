@@ -110,6 +110,7 @@ enum Job {
 
 /// What is running, shared with the game thread so the stop before power-off never waits
 /// for the supervisor thread to be free (review M1).
+#[derive(Clone)]
 struct RunInfo {
     monitor: u32,
     child: Option<u32>,
@@ -336,9 +337,15 @@ impl Syncthing {
                 g.stopping = true;
                 g.run.take()
             }
-            Err(_) => None,
+            Err(_) => {
+                eprintln!("slot: sync: FAILED to stop before power-off (supervisor state lost)");
+                self.send(Job::PowerOff);
+                return false;
+            }
         };
         self.send(Job::PowerOff);
+        // Whatever is running, including something the supervisor is itself stopping right
+        // now (it stays recorded until its stop has finished, re-review R1).
         let Some(info) = taken else {
             return true;
         };
@@ -661,12 +668,14 @@ impl Worker {
             self.publish();
             return Stopped::NotRunning;
         };
+        // Still recorded while it is being stopped, so a power-off arriving meanwhile
+        // stops it too (re-review R1); removed once the stop has finished.
         let ours = self
             .shared
             .gate
             .lock()
             .ok()
-            .and_then(|mut g| g.run.take_if(|i| i.monitor == run.monitor));
+            .and_then(|g| g.run.as_ref().filter(|i| i.monitor == run.monitor).cloned());
         let outcome = match ours {
             Some(info) => stop_staged(
                 self.procs.as_ref(),
@@ -678,6 +687,9 @@ impl Worker {
             ),
             None => Stopped::NotRunning,
         };
+        if let Ok(mut g) = self.shared.gate.lock() {
+            g.run.take_if(|i| i.monitor == run.monitor);
+        }
         log_stop(why, &outcome);
         self.folder_error = None;
         self.publish();

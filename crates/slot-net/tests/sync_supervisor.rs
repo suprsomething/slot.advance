@@ -834,3 +834,27 @@ fn a_failed_floor_repair_counts_as_a_failure_not_an_instant_restart() {
     wait_for("restart", || r.w.lock().unwrap().spawned.len() == 2);
     assert!(r.w.lock().unwrap().patches.len() >= 3);
 }
+
+#[test]
+fn power_off_also_stops_what_the_supervisor_is_already_stopping() {
+    let r = rig_with(|w, _| {
+        w.gui = Some(gui_ok());
+        // A slow stop: the shutdown request and SIGTERM are ignored, only SIGKILL works.
+        w.shutdown = Some(Obey::No);
+        w.term = Some(Obey::No);
+    });
+    r.sync.enable();
+    running(&r);
+    r.sync.disable();
+    // The supervisor is now in its stop (waiting out the shutdown stage).
+    std::thread::sleep(Duration::from_millis(30));
+    assert!(alive_count(&r) > 0);
+    let began = Instant::now();
+    assert!(r.sync.before_poweroff());
+    assert_eq!(
+        alive_count(&r),
+        0,
+        "power-off did not return before it was stopped"
+    );
+    assert!(began.elapsed() < limits().stop_total() + Duration::from_millis(100));
+}
