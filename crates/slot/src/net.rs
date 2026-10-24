@@ -73,6 +73,10 @@ pub trait Net: Send {
     /// The Network menu opened: refresh the Service row and the password shown.
     fn sync_menu_opened(&mut self) {}
 
+    /// The Web Interface screen is still open: check the credentials shown again, in the
+    /// background (returns at once).
+    fn sync_check_credentials(&self) {}
+
     /// Reset Web Interface Credentials.
     fn reset_sync_credentials(&mut self) {}
 }
@@ -188,6 +192,12 @@ impl Net for WifiOn {
     fn reset_sync_credentials(&mut self) {
         if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
             s.reset_credentials();
+        }
+    }
+
+    fn sync_check_credentials(&self) {
+        if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
+            s.check_credentials();
         }
     }
 }

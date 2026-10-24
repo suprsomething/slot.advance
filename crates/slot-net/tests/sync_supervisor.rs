@@ -49,6 +49,8 @@ struct World {
     /// Makes a health check or `generate` take this long (the supervisor is busy).
     slow_health: Option<Duration>,
     slow_generate: Option<Duration>,
+    /// Makes reading the web interface settings take this long.
+    slow_gui: Option<Duration>,
     patch_fails: bool,
 }
 
@@ -225,6 +227,10 @@ impl Api for FakeApi {
     }
 
     fn gui(&mut self) -> Result<Gui, String> {
+        let slow = self.0.lock().unwrap().slow_gui;
+        if let Some(d) = slow {
+            std::thread::sleep(d);
+        }
         self.0.lock().unwrap().gui.clone().ok_or("no gui".into())
     }
 
@@ -724,7 +730,11 @@ fn a_reset_while_stopped_uses_generate() {
     wait_for("Stopped", || alive_count(&r) == 0);
     r.sync.reset_credentials();
     wait_for("generate", || r.w.lock().unwrap().generated.len() == 2);
-    wait_for("new password shown", || r.sync.status().password != first);
+    // A new password, not merely something else (stopping shows "Not available yet").
+    wait_for("new password shown", || {
+        let now = r.sync.status().password;
+        matches!(now, Shown::Password(_)) && now != first
+    });
     let saved = slot_net::sync::creds::read(&r.layout.credentials).unwrap();
     assert_eq!(
         Shown::Password(saved.passphrase.clone()),
@@ -857,4 +867,145 @@ fn power_off_also_stops_what_the_supervisor_is_already_stopping() {
         "power-off did not return before it was stopped"
     );
     assert!(began.elapsed() < limits().stop_total() + Duration::from_millis(100));
+}
+
+// Credential freshness (approved 25 Oct 2026): what the Web Interface screen shows was
+// checked against Syncthing's settings as they are now.
+
+fn shows_password(r: &Rig) -> bool {
+    matches!(r.sync.status().password, Shown::Password(_))
+}
+
+#[test]
+fn the_shown_password_is_forgotten_at_a_stop_until_checked_again() {
+    let r = rig();
+    r.sync.enable();
+    running(&r);
+    wait_for("shown", || shows_password(&r));
+    r.sync.disable();
+    wait_for("Stopped", || alive_count(&r) == 0);
+    assert_eq!(r.sync.status().password, Shown::Unknown);
+    // Nothing checks by itself: it stays unknown...
+    std::thread::sleep(Duration::from_millis(150));
+    assert_eq!(r.sync.status().password, Shown::Unknown);
+    // ...until the next check, which reads the settings file while stopped.
+    r.sync.check_credentials();
+    wait_for("shown from the file", || shows_password(&r));
+}
+
+#[test]
+fn the_shown_password_is_forgotten_at_a_start_until_it_answers() {
+    let r = rig();
+    r.sync.enable();
+    running(&r);
+    wait_for("shown", || shows_password(&r));
+    r.sync.disable();
+    wait_for("Stopped", || alive_count(&r) == 0);
+    r.sync.check_credentials();
+    wait_for("shown from the file", || shows_password(&r));
+    // Started again but not answering yet: nothing is shown from before the start.
+    r.w.lock().unwrap().health_default = Some(Health::NotAnswering("starting".into()));
+    r.sync.enable();
+    wait_for("second start", || r.w.lock().unwrap().spawned.len() == 2);
+    wait_for("forgotten", || r.sync.status().password == Shown::Unknown);
+    assert!(r.sync.status().starting);
+    r.w.lock().unwrap().health_default = None;
+    running(&r);
+    wait_for("checked once running", || shows_password(&r));
+}
+
+#[test]
+fn the_shown_password_is_forgotten_when_syncthing_exits() {
+    let r = rig();
+    r.sync.enable();
+    running(&r);
+    wait_for("shown", || shows_password(&r));
+    {
+        let mut w = r.w.lock().unwrap();
+        let m = *w.exits.keys().next().unwrap();
+        end(&mut w, m, Exit::Code(0));
+    }
+    wait_for("Stopped", || r.sync.status().service == Service::Stopped);
+    assert_eq!(r.sync.status().password, Shown::Unknown);
+}
+
+#[test]
+fn a_recheck_shows_a_change_made_in_the_browser_and_a_failed_check_shows_nothing() {
+    let r = rig();
+    r.sync.enable();
+    running(&r);
+    wait_for("shown", || shows_password(&r));
+    // Changed in a browser while the screen stays open: the next check (the menu asks
+    // every 10 s) shows it.
+    r.w.lock().unwrap().gui.as_mut().unwrap().hash =
+        "$2b$04$WSPUppCzLDZupyqQdboZhugGT1AGXuvVr5eNPm71vF2IM94a6gz9e".into();
+    r.sync.check_credentials();
+    wait_for("Changed", || r.sync.status().password == Shown::Changed);
+    // Changed back to the saved hash: shown again.
+    let saved = slot_net::sync::creds::read(&r.layout.credentials).unwrap();
+    r.w.lock().unwrap().gui.as_mut().unwrap().hash = saved.hash.clone();
+    r.sync.check_credentials();
+    wait_for("shown again", || {
+        r.sync.status().password == Shown::Password(saved.passphrase.clone())
+    });
+    // The check itself fails: nothing is shown, not the last answer.
+    r.w.lock().unwrap().gui = None;
+    r.sync.check_credentials();
+    wait_for("Unknown", || r.sync.status().password == Shown::Unknown);
+}
+
+#[test]
+fn an_unchanged_hash_is_not_verified_with_bcrypt_again() {
+    let r = rig();
+    r.sync.enable();
+    running(&r);
+    wait_for("shown", || shows_password(&r));
+    // A real, deliberately slow bcrypt hash of another password: only verifying it costs.
+    let slow = bcrypt::hash("someone else's words", 12).unwrap();
+    r.w.lock().unwrap().gui.as_mut().unwrap().hash = slow;
+    let t = Instant::now();
+    r.sync.check_credentials();
+    wait_for("Changed", || r.sync.status().password == Shown::Changed);
+    let first = t.elapsed();
+    // Rechecks with nothing changed reuse the verdict. Measured to a reset queued
+    // behind them, whose result is visible.
+    let t = Instant::now();
+    for _ in 0..3 {
+        r.sync.check_credentials();
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    r.sync.reset_credentials();
+    wait_for("reset", || shows_password(&r));
+    let again = t.elapsed();
+    assert!(
+        again * 4 < first,
+        "rechecks took {again:?}, the first check {first:?}"
+    );
+}
+
+#[test]
+fn rechecks_never_queue_up_behind_a_busy_supervisor() {
+    let r = rig();
+    r.sync.enable();
+    running(&r);
+    wait_for("shown", || shows_password(&r));
+    // Each check now takes 60 ms, and the supervisor is busy (a slow health check) while
+    // the screen asks fifty times.
+    r.w.lock().unwrap().slow_health = Some(Duration::from_millis(300));
+    std::thread::sleep(Duration::from_millis(60));
+    r.w.lock().unwrap().slow_gui = Some(Duration::from_millis(60));
+    let t = Instant::now();
+    for _ in 0..50 {
+        r.sync.check_credentials();
+    }
+    r.w.lock().unwrap().slow_health = None;
+    // A reset queued behind them: fifty checks would hold it up for 3 s; one, briefly.
+    r.sync.reset_credentials();
+    let before = r.sync.status().password;
+    wait_for("reset", || {
+        let now = r.sync.status().password;
+        matches!(now, Shown::Password(_)) && now != before
+    });
+    let took = t.elapsed();
+    assert!(took < Duration::from_millis(1500), "took {took:?}");
 }

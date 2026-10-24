@@ -97,8 +97,15 @@ enum Screen {
     },
 }
 
+/// While the Web Interface screen is open, the credentials shown are checked again this
+/// often (so a change made in a browser shows within about this long, not at once).
+pub const CREDENTIALS_RECHECK_MS: u64 = 10_000;
+
 pub struct NetMenu {
     screen: Screen,
+    /// When the credentials were last asked to be checked, while the Web Interface screen
+    /// is open.
+    credentials_at: Option<u64>,
 }
 
 impl Default for NetMenu {
@@ -154,6 +161,7 @@ impl NetMenu {
     pub fn new() -> NetMenu {
         NetMenu {
             screen: Screen::Menu { row: 0 },
+            credentials_at: None,
         }
     }
 
@@ -482,8 +490,10 @@ impl NetMenu {
         Effect::None
     }
 
-    /// Moves on from Joining once the result is in.
-    pub fn tick(&mut self, net: &dyn Net) {
+    /// Moves on from Joining once the result is in; re-checks the credentials while the
+    /// Web Interface screen is open. `now_ms` is the app's clock.
+    pub fn tick(&mut self, net: &dyn Net, now_ms: u64) {
+        self.recheck_credentials(net, now_ms);
         let Screen::Joining { ssid, kb } = &mut self.screen else {
             return;
         };
@@ -519,6 +529,24 @@ impl NetMenu {
             ssid,
             kb: typed,
         };
+    }
+
+    /// Every `CREDENTIALS_RECHECK_MS` while the Web Interface screen is open. Opening it
+    /// already asked for a check, so the first comes 10 s after that. The work is done on
+    /// Syncthing's supervisor thread; this only queues it.
+    fn recheck_credentials(&mut self, net: &dyn Net, now_ms: u64) {
+        if !matches!(self.screen, Screen::WebInterface) {
+            self.credentials_at = None;
+            return;
+        }
+        match self.credentials_at {
+            None => self.credentials_at = Some(now_ms),
+            Some(t) if now_ms.saturating_sub(t) >= CREDENTIALS_RECHECK_MS => {
+                net.sync_check_credentials();
+                self.credentials_at = Some(now_ms);
+            }
+            Some(_) => {}
+        }
     }
 
     /// What to draw. `wifi` and `sync` are the saved Wi-Fi and Syncthing settings.

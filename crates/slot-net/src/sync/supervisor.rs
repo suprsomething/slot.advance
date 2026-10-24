@@ -3,6 +3,7 @@
 //! Wi-Fi quiet request, the sleep gate or the game. It is never in the lid, sleep or resume
 //! path: during suspend Syncthing and this thread are simply frozen with everything else.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -103,6 +104,8 @@ enum Job {
     Disable,
     Reconnected,
     MenuOpened,
+    /// Re-check only the credentials shown (the Web Interface screen is open).
+    Credentials,
     Reset,
     PowerOff,
     Exited(u32, Exit),
@@ -133,6 +136,9 @@ struct Shared {
     gate: Mutex<Gate>,
     /// A second handle on the operating system, for the game thread's power-off stop.
     procs: Mutex<Box<dyn Procs>>,
+    /// A credentials check is queued: another is not added (a busy supervisor never
+    /// collects a backlog of them).
+    credentials_queued: AtomicBool,
 }
 
 /// Makes the REST client for a running Syncthing (tests substitute a stand-in).
@@ -262,6 +268,7 @@ impl Syncthing {
             status: Mutex::new(SyncStatus::default()),
             gate: Mutex::new(Gate::default()),
             procs: Mutex::new(procs.handle()),
+            credentials_queued: AtomicBool::new(false),
         });
         let worker = Worker {
             layout,
@@ -280,6 +287,7 @@ impl Syncthing {
             folders_at: None,
             folder_error: None,
             saved: None,
+            verdict: None,
         };
         let spawned = std::thread::Builder::new()
             .name("slot-sync".into())
@@ -312,6 +320,14 @@ impl Syncthing {
     /// The Network menu opened: refresh the password shown and the folder errors.
     pub fn menu_opened(&self) {
         self.send(Job::MenuOpened);
+    }
+
+    /// The Web Interface screen is still open: check the credentials shown again (the
+    /// menu asks every 10 s). Only one such check is ever queued.
+    pub fn check_credentials(&self) {
+        if !self.shared.credentials_queued.swap(true, Ordering::AcqRel) {
+            self.send(Job::Credentials);
+        }
     }
 
     /// Reset Web Interface Credentials (I9).
@@ -399,6 +415,17 @@ struct Worker {
     folders_at: Option<Instant>,
     folder_error: Option<String>,
     saved: Option<creds::Saved>,
+    /// The last credentials check, so an unchanged hash is never verified with bcrypt
+    /// again.
+    verdict: Option<Verdict>,
+}
+
+/// What the last credentials check compared, and what it decided.
+struct Verdict {
+    user: String,
+    hash: String,
+    saved_hash: Option<String>,
+    shown: Shown,
 }
 
 /// How a stop ended (refinement 1: which stage worked, and anything left is reported).
@@ -463,6 +490,12 @@ impl Worker {
                 }
             }
             Job::MenuOpened => self.menu_opened(),
+            Job::Credentials => {
+                self.shared
+                    .credentials_queued
+                    .store(false, Ordering::Release);
+                self.refresh_password();
+            }
             Job::Reset => self.reset(),
             Job::PowerOff => {
                 // The game thread has already stopped what was running (before_poweroff).
@@ -500,6 +533,13 @@ impl Worker {
         }
     }
 
+    /// Syncthing started or stopped: what was shown was checked against the settings as
+    /// they were, so nothing is shown until the next check.
+    fn forget_password(&mut self) {
+        self.verdict = None;
+        self.set_password(Shown::Unknown);
+    }
+
     fn fail(&mut self, why: String) {
         eprintln!("slot: sync: error: {why}");
         self.error = Some(why);
@@ -510,6 +550,7 @@ impl Worker {
         if self.stopping() || !self.want || self.run.is_some() {
             return;
         }
+        self.forget_password();
         if !self.layout.program.is_file() {
             return self.fail("the Syncthing program is missing (System/syncthing)".into());
         }
@@ -668,6 +709,7 @@ impl Worker {
             self.publish();
             return Stopped::NotRunning;
         };
+        self.forget_password();
         // Still recorded while it is being stopped, so a power-off arriving meanwhile
         // stops it too (re-review R1); removed once the stop has finished.
         let ours = self
@@ -718,6 +760,7 @@ impl Worker {
         }
         self.run = None;
         self.folder_error = None;
+        self.forget_password();
         match exit {
             Exit::RESTART => {
                 let now = Instant::now();
@@ -933,19 +976,34 @@ impl Worker {
                 match gui {
                     Ok(g) => (g.user, g.hash),
                     // Unknown rather than a password that may have changed (review N3).
-                    Err(_) => return self.set_password(Shown::Unknown),
+                    Err(_) => return self.forget_password(),
                 }
             }
             None => match config::read(&self.layout) {
                 Ok(s) => (s.user, s.hash),
-                Err(_) => return self.set_password(Shown::Unknown),
+                Err(_) => return self.forget_password(),
             },
         };
+        let saved_hash = self.saved.as_ref().map(|s| s.hash.clone());
+        if let Some(v) = self
+            .verdict
+            .as_ref()
+            .filter(|v| v.user == user && v.hash == hash && v.saved_hash == saved_hash)
+        {
+            // Nothing changed since the last check: the same answer, without bcrypt.
+            return self.set_password(v.shown.clone());
+        }
         let (shown, updated) = creds::shown(self.saved.as_ref(), &user, &hash);
         if let Some(u) = updated {
             let _ = creds::write(&self.layout.credentials, &u);
             self.saved = Some(u);
         }
+        self.verdict = Some(Verdict {
+            user,
+            hash,
+            saved_hash: self.saved.as_ref().map(|s| s.hash.clone()),
+            shown: shown.clone(),
+        });
         self.set_password(shown);
     }
 
@@ -983,6 +1041,7 @@ impl Worker {
                     eprintln!("slot: sync: reset: could not save the credentials ({e})");
                 }
                 self.saved = Some(saved);
+                self.verdict = None;
                 self.set_password(Shown::Password(pass));
                 eprintln!("slot: sync: web interface credentials reset");
             }
@@ -1003,6 +1062,7 @@ impl Worker {
         };
         creds::write(&self.layout.credentials, &saved).map_err(|e| e.to_string())?;
         self.saved = Some(saved);
+        self.verdict = None;
         Ok(())
     }
 }

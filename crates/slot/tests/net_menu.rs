@@ -89,6 +89,9 @@ impl Net for Fake {
     fn reset_sync_credentials(&mut self) {
         self.s().calls.push("sync reset".into());
     }
+    fn sync_check_credentials(&self) {
+        self.s().calls.push("sync check".into());
+    }
 }
 
 fn seen(name: &str, signal: i32, security: Security) -> Seen {
@@ -694,4 +697,48 @@ fn switching_wifi_off_also_stops_syncthing_and_greys_its_row() {
         }
         v => panic!("{v:?}"),
     }
+}
+
+fn checks(t: &T) -> usize {
+    t.net.calls().iter().filter(|c| *c == "sync check").count()
+}
+
+impl T {
+    fn after_ms(&mut self, ms: u64) {
+        let now = self.app.now() + ms;
+        self.app.tick_ms(now);
+    }
+}
+
+#[test]
+fn the_credentials_are_checked_again_every_10_s_while_the_web_interface_is_open() {
+    let mut t = with_syncthing();
+    t.open_network();
+    // On the menu: never.
+    t.after_ms(1);
+    t.after_ms(30_000);
+    assert_eq!(checks(&t), 0);
+    let opened = |t: &T| t.net.calls().iter().filter(|c| *c == "sync menu").count();
+    let before = opened(&t);
+    while selected_label(&t.view()) != "Web Interface" {
+        t.press(Btn::Down);
+    }
+    t.press(Btn::A);
+    // Opening it asks once (as before); then every 10 s, not sooner.
+    assert_eq!(opened(&t), before + 1);
+    t.after_ms(1);
+    t.after_ms(9_900);
+    assert_eq!(checks(&t), 0);
+    t.after_ms(100);
+    assert_eq!(checks(&t), 1);
+    t.after_ms(5_000);
+    assert_eq!(checks(&t), 1);
+    t.after_ms(5_000);
+    assert_eq!(checks(&t), 2);
+    // Back to the menu: no more checks.
+    t.press(Btn::B);
+    assert!(matches!(t.view(), NetView::Menu { .. }));
+    t.after_ms(1);
+    t.after_ms(60_000);
+    assert_eq!(checks(&t), 2);
 }

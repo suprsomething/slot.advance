@@ -2322,7 +2322,7 @@ impl App {
             self.net.idle_moment();
         }
         if let Some(m) = &mut self.net_menu {
-            m.tick(self.net.as_ref());
+            m.tick(self.net.as_ref(), self.clock as u64);
         }
         let offer = self.undo_label();
         if let Some(p) = &mut self.polaroids {
