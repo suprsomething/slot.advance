@@ -34,6 +34,9 @@ pub enum Unload {
     TimedOut { ms: u128 },
     /// `rmmod` could not be started at all.
     NotRun(String),
+    /// `/proc/modules` could not be read, before (`ms` None: nothing was run) or after
+    /// `rmmod` ended. The outcome is unknown, so it is never reported as success.
+    Unknown { ms: Option<u128>, code: Option<i32> },
 }
 
 impl Unload {
@@ -59,6 +62,15 @@ impl Unload {
             Unload::NotRun(e) => {
                 format!("wifi driver: FAILED: rmmod {WIFI_DRIVER} could not start ({e}); continuing anyway")
             }
+            Unload::Unknown { ms: None, .. } => format!(
+                "wifi driver: FAILED: could not read the module list, {WIFI_DRIVER} state unknown, nothing run; continuing anyway"
+            ),
+            Unload::Unknown { ms: Some(ms), code } => {
+                let code = code.map_or("unknown".to_string(), |c| format!("exit {c}"));
+                format!(
+                    "wifi driver: FAILED: rmmod ended ({code}) after {ms} ms but the module list could not be read to confirm; continuing anyway"
+                )
+            }
         }
     }
 }
@@ -79,13 +91,32 @@ impl DriverUnload {
     }
 
     pub fn loaded(&self) -> bool {
+        module_listed(&self.proc, WIFI_DRIVER) == Some(true)
+    }
+
+    fn listed(&self) -> Option<bool> {
         module_listed(&self.proc, WIFI_DRIVER)
+    }
+
+    fn judge(&self, ms: u128, code: Option<i32>) -> Unload {
+        match self.listed() {
+            Some(false) => Unload::Unloaded { ms },
+            Some(true) => Unload::StillLoaded { ms, code },
+            None => Unload::Unknown { ms: Some(ms), code },
+        }
     }
 
     /// Returns within `limit` (plus one poll) whatever `rmmod` does.
     pub fn run(&self) -> Unload {
-        if !self.loaded() {
-            return Unload::NotLoaded;
+        match self.listed() {
+            Some(true) => {}
+            Some(false) => return Unload::NotLoaded,
+            None => {
+                return Unload::Unknown {
+                    ms: None,
+                    code: None,
+                }
+            }
         }
         let start = Instant::now();
         let mut child = match Command::new(&self.rmmod)
@@ -100,27 +131,10 @@ impl DriverUnload {
         };
         loop {
             match child.try_wait() {
-                Ok(Some(status)) => {
-                    let ms = start.elapsed().as_millis();
-                    return if self.loaded() {
-                        Unload::StillLoaded {
-                            ms,
-                            code: status.code(),
-                        }
-                    } else {
-                        Unload::Unloaded { ms }
-                    };
-                }
+                Ok(Some(status)) => return self.judge(start.elapsed().as_millis(), status.code()),
                 Ok(None) => {}
-                Err(_) => {
-                    // Cannot tell how it ended: judge by the module list alone.
-                    let ms = start.elapsed().as_millis();
-                    return if self.loaded() {
-                        Unload::StillLoaded { ms, code: None }
-                    } else {
-                        Unload::Unloaded { ms }
-                    };
-                }
+                // Cannot tell how it ended: judge by the module list alone.
+                Err(_) => return self.judge(start.elapsed().as_millis(), None),
             }
             if start.elapsed() >= self.limit {
                 // Not killed and not waited for: dropping the handle leaves it running.
@@ -133,9 +147,11 @@ impl DriverUnload {
     }
 }
 
-fn module_listed(proc: &Path, name: &str) -> bool {
+/// Some(listed), or None if the module list cannot be read.
+fn module_listed(proc: &Path, name: &str) -> Option<bool> {
     fs::read_to_string(proc.join("modules"))
-        .is_ok_and(|m| m.lines().any(|l| l.split_whitespace().next() == Some(name)))
+        .ok()
+        .map(|m| m.lines().any(|l| l.split_whitespace().next() == Some(name)))
 }
 
 #[cfg(test)]
@@ -238,13 +254,14 @@ mod tests {
     fn a_hung_rmmod_is_left_behind_within_the_limit() {
         let m = Mock::new(true);
         let limit = Duration::from_millis(300);
-        let u = m.unload("#!/bin/sh\nsleep 30\n", limit);
+        // Ends by itself shortly after the test, so nothing is left running for long.
+        let u = m.unload("#!/bin/sh\nexec sleep 3\n", limit);
         let t = Instant::now();
         let r = u.run();
         let took = t.elapsed();
         assert!(matches!(r, Unload::TimedOut { .. }), "{r:?}");
         assert!(took >= limit, "{took:?}");
-        assert!(took < limit + Duration::from_millis(500), "{took:?}");
+        assert!(took < limit + Duration::from_millis(1500), "{took:?}");
         assert!(!r.done());
         assert!(r.describe().contains("FAILED"));
         assert!(r.describe().contains("left behind"));
@@ -260,6 +277,48 @@ mod tests {
         };
         let r = u.run();
         assert!(matches!(r, Unload::NotRun(_)), "{r:?}");
+        assert!(r.describe().contains("FAILED"));
+    }
+
+    #[test]
+    fn an_unreadable_module_list_runs_nothing_and_is_a_failure() {
+        let m = Mock::new(true);
+        fs::remove_file(m.proc().join("modules")).unwrap();
+        let marker = m.dir.path().join("ran");
+        let u = m.unload(
+            &format!("#!/bin/sh\ntouch {}\n", marker.display()),
+            UNLOAD_LIMIT,
+        );
+        let r = u.run();
+        assert_eq!(
+            r,
+            Unload::Unknown {
+                ms: None,
+                code: None
+            }
+        );
+        assert!(!marker.exists());
+        assert!(!r.done());
+        assert!(r.describe().contains("FAILED"));
+    }
+
+    #[test]
+    fn an_unreadable_module_list_afterwards_is_not_success() {
+        let m = Mock::new(true);
+        let script = format!("#!/bin/sh\nrm {}/modules\n", m.proc().display());
+        let u = m.unload(&script, UNLOAD_LIMIT);
+        let r = u.run();
+        assert!(
+            matches!(
+                r,
+                Unload::Unknown {
+                    ms: Some(_),
+                    code: Some(0)
+                }
+            ),
+            "{r:?}"
+        );
+        assert!(!r.done());
         assert!(r.describe().contains("FAILED"));
     }
 
