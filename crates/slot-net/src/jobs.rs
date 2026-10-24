@@ -15,7 +15,7 @@ use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::clock::{self, Decision, Offer};
+use crate::clock::{self, Decision, Offer, RtcWrite};
 use crate::run::Cancel;
 use crate::saved::Key;
 use crate::scan::Seen;
@@ -169,15 +169,20 @@ pub struct NetJobs {
     tx: Sender<Job>,
     shared: Arc<Shared>,
     step_clock: fn(f64) -> std::io::Result<()>,
+    write_rtc: fn() -> RtcWrite,
 }
 
 impl NetJobs {
     /// Starts the thread, which waits for the radio and joins the saved networks.
     pub fn spawn(wifi: Wifi) -> NetJobs {
-        NetJobs::spawn_with(wifi, clock::step_system_clock)
+        NetJobs::spawn_with(wifi, clock::step_system_clock, clock::write_rtc)
     }
 
-    pub fn spawn_with(wifi: Wifi, step_clock: fn(f64) -> std::io::Result<()>) -> NetJobs {
+    pub fn spawn_with(
+        wifi: Wifi,
+        step_clock: fn(f64) -> std::io::Result<()>,
+        write_rtc: fn() -> RtcWrite,
+    ) -> NetJobs {
         let (tx, rx) = channel();
         let shared = Arc::new(Shared {
             quiet_asked: AtomicU64::new(0),
@@ -215,6 +220,7 @@ impl NetJobs {
             tx,
             shared,
             step_clock,
+            write_rtc,
         };
         jobs.send(Job::Start);
         jobs
@@ -301,7 +307,8 @@ impl NetJobs {
     }
 
     /// Called by the game thread when no game is seated. Applies the clock correction, if
-    /// one is waiting, in that same moment (requirement 22).
+    /// one is waiting, in that same moment (requirement 22), and then writes it to the RTC
+    /// (I8), still in that moment: both finish before the game thread can seat a game.
     pub fn idle_moment(&self) {
         if self.shared.clock_done.load(Ordering::SeqCst) {
             return;
@@ -319,11 +326,26 @@ impl NetJobs {
             }
             Decision::Step(s) => {
                 match (self.step_clock)(s) {
-                    Ok(()) => eprintln!(
-                        "slot: time: clock corrected by {s:+.2} s from network time ({} replies; RTC not written)",
-                        offer.replies
+                    Ok(()) => {
+                        eprintln!(
+                            "slot: time: clock corrected by {s:+.2} s from network time ({} replies)",
+                            offer.replies
+                        );
+                        // Only after a successful step; a failure here leaves the
+                        // corrected system clock as it is.
+                        match (self.write_rtc)() {
+                            RtcWrite::Written(took) => eprintln!(
+                                "slot: time: RTC written in {} ms",
+                                took.as_millis()
+                            ),
+                            RtcWrite::Failed(why) => eprintln!(
+                                "slot: time: FAILED to write the RTC ({why}); the system clock correction stands"
+                            ),
+                        }
+                    }
+                    Err(e) => eprintln!(
+                        "slot: time: the clock could not be corrected: {e} (RTC not written)"
                     ),
-                    Err(e) => eprintln!("slot: time: the clock could not be corrected: {e}"),
                 }
                 self.shared.clock_done.store(true, Ordering::SeqCst);
             }
@@ -754,7 +776,7 @@ mod tests {
                 crate::wifi::key_for(b"Home", Some("home pass")).unwrap(),
             );
         }
-        let jobs = NetJobs::spawn_with(w, step);
+        let jobs = NetJobs::spawn_with(w, step, no_rtc);
         Rig {
             f,
             sim,
@@ -765,6 +787,10 @@ mod tests {
 
     fn no_step(_: f64) -> std::io::Result<()> {
         panic!("the clock must not be stepped here")
+    }
+
+    fn no_rtc() -> RtcWrite {
+        panic!("the RTC must not be written here")
     }
 
     fn connected(j: &NetJobs) -> bool {
@@ -848,7 +874,7 @@ mod tests {
             b"Home",
             crate::wifi::key_for(b"Home", Some("home pass")).unwrap(),
         );
-        let jobs = NetJobs::spawn_with(w, no_step);
+        let jobs = NetJobs::spawn_with(w, no_step, no_rtc);
         std::thread::sleep(Duration::from_millis(100));
         jobs.go_quiet();
         wait_for("quiet", || jobs.is_quiet());
@@ -966,10 +992,42 @@ mod tests {
     }
 
     static STEPPED: AtomicU32 = AtomicU32::new(0);
+    static WRITTEN: AtomicU32 = AtomicU32::new(0);
     fn count_step(s: f64) -> std::io::Result<()> {
         assert!((s - 36.35).abs() < 0.01, "{s}");
+        assert_eq!(
+            WRITTEN.load(Ordering::SeqCst),
+            0,
+            "the RTC is written only after the step"
+        );
         STEPPED.fetch_add(1, Ordering::SeqCst);
         Ok(())
+    }
+    fn count_rtc() -> RtcWrite {
+        assert_eq!(STEPPED.load(Ordering::SeqCst), 1, "after a successful step");
+        WRITTEN.fetch_add(1, Ordering::SeqCst);
+        RtcWrite::Written(Duration::from_millis(12))
+    }
+
+    fn time_rig(
+        offset: &str,
+        step: fn(f64) -> std::io::Result<()>,
+        rtc: fn() -> RtcWrite,
+    ) -> (NetJobs, tempfile::TempDir) {
+        let f = FakeSys::new();
+        let sim = Sim::new(&f);
+        sim.add_network("Home", Some("home pass"), -50);
+        sim.state.lock().unwrap().ntp_output =
+            format!("ntpd: reply from 192.168.4.1: offset:{offset} delay:0.004\n");
+        let d = card();
+        let mut w = wifi(&f, &sim, d.path());
+        w.saved.remember(
+            b"Home",
+            crate::wifi::key_for(b"Home", Some("home pass")).unwrap(),
+        );
+        let jobs = NetJobs::spawn_with(w, step, rtc);
+        wait_for("an answer", || jobs.shared.offer.lock().unwrap().is_some());
+        (jobs, d)
     }
 
     #[test]
@@ -985,20 +1043,57 @@ mod tests {
             b"Home",
             crate::wifi::key_for(b"Home", Some("home pass")).unwrap(),
         );
-        let jobs = NetJobs::spawn_with(w, count_step);
+        let jobs = NetJobs::spawn_with(w, count_step, count_rtc);
         wait_for("an answer", || jobs.shared.offer.lock().unwrap().is_some());
         assert_eq!(
             STEPPED.load(Ordering::SeqCst),
             0,
             "nothing moves until asked"
         );
+        assert_eq!(WRITTEN.load(Ordering::SeqCst), 0);
         jobs.idle_moment();
+        // Both done by the time idle_moment returns: nothing continues into a game.
         assert_eq!(STEPPED.load(Ordering::SeqCst), 1);
+        assert_eq!(WRITTEN.load(Ordering::SeqCst), 1);
         assert!(jobs.clock_done());
         jobs.idle_moment();
         assert_eq!(STEPPED.load(Ordering::SeqCst), 1, "once per boot");
+        assert_eq!(WRITTEN.load(Ordering::SeqCst), 1, "once per boot");
         let queries = sim.log().iter().filter(|l| l.starts_with("ntpd")).count();
         assert_eq!(queries, 1);
+    }
+
+    static FAILED_WRITES: AtomicU32 = AtomicU32::new(0);
+    fn ok_step(_: f64) -> std::io::Result<()> {
+        Ok(())
+    }
+    fn failing_rtc() -> RtcWrite {
+        FAILED_WRITES.fetch_add(1, Ordering::SeqCst);
+        RtcWrite::Failed("hwclock exited with 1 after 4 ms".into())
+    }
+
+    #[test]
+    fn a_failed_rtc_write_keeps_the_correction_and_is_not_retried() {
+        let (jobs, _d) = time_rig("+36.35", ok_step, failing_rtc);
+        jobs.idle_moment();
+        assert_eq!(FAILED_WRITES.load(Ordering::SeqCst), 1);
+        assert!(
+            jobs.clock_done(),
+            "network time is still done for this boot"
+        );
+        jobs.idle_moment();
+        assert_eq!(FAILED_WRITES.load(Ordering::SeqCst), 1, "once per boot");
+    }
+
+    fn failing_step(_: f64) -> std::io::Result<()> {
+        Err(std::io::Error::other("EPERM"))
+    }
+
+    #[test]
+    fn a_failed_step_never_writes_the_rtc() {
+        let (jobs, _d) = time_rig("+36.35", failing_step, no_rtc);
+        jobs.idle_moment();
+        assert!(jobs.clock_done());
     }
 
     #[test]
@@ -1014,7 +1109,7 @@ mod tests {
             b"Home",
             crate::wifi::key_for(b"Home", Some("home pass")).unwrap(),
         );
-        let jobs = NetJobs::spawn_with(w, no_step);
+        let jobs = NetJobs::spawn_with(w, no_step, no_rtc);
         wait_for("an answer", || jobs.shared.offer.lock().unwrap().is_some());
         jobs.idle_moment();
         assert!(jobs.clock_done());

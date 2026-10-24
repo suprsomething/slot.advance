@@ -62,6 +62,9 @@ pub struct Ran {
     pub stdout: String,
     pub timed_out: bool,
     pub cancelled: bool,
+    /// Killed at the limit or on cancel, but still not gone (stuck inside the kernel, where
+    /// no signal reaches it). Whatever it was doing may still complete later.
+    pub still_running: bool,
 }
 
 impl Ran {
@@ -75,6 +78,7 @@ impl Ran {
             stdout: why.to_string(),
             timed_out: false,
             cancelled: false,
+            still_running: false,
         }
     }
 }
@@ -237,6 +241,7 @@ impl Runner for System {
                     matches!(child.try_wait(), Ok(Some(_)))
                 });
                 if !gone {
+                    ran.still_running = true;
                     if let Ok(mut stuck) = self.stuck.lock() {
                         stuck.push(child);
                     }

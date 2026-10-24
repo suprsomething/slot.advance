@@ -987,6 +987,7 @@ pub mod sim {
                     stdout: s.ntp_output.clone(),
                     timed_out: true,
                     cancelled: false,
+                    still_running: false,
                 },
                 _ => fail,
             }

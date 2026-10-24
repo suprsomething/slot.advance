@@ -8,10 +8,23 @@
 //! The correction itself is applied by the game thread, in the same moment it confirms no
 //! game is seated, so a game can never be seated while the clock moves (manual save states
 //! are named by the wall-clock second). It steps the system clock only when it is more than
-//! 1 s out (ntpd's own step threshold), once per boot, in memory only: the RTC is never
-//! written (I8 is a separate decision; until approved, nothing here touches it).
+//! 1 s out (ntpd's own step threshold), once per boot.
+//!
+//! I8 (approved at checkpoint B, Dean, 24 Oct 2026): straight after a successful step, in
+//! the same moment and on the same thread, the corrected time is written to the RTC
+//! (rtc0) with `hwclock -u -w`, the same command Date & Time uses. The write is
+//! synchronous, so the game thread cannot seat a game until it has finished; it is bounded
+//! (`RTC_WRITE_LIMIT`), and at the limit it is killed rather than left to finish during
+//! play. A failed write is logged and never undoes the system clock correction.
 
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
+
+use crate::run::{Cancel, Cmd, Runner, System};
+
+/// How long the RTC write may take. BusyBox `hwclock -w` can wait for the next second
+/// edge before writing (up to 1 s); anything longer is a failure.
+pub const RTC_WRITE_LIMIT: Duration = Duration::from_secs(3);
 
 /// How long a query runs (Phase 0E: replies within a few seconds; DNS failure bounded here).
 pub const QUERY_LIMIT: Duration = Duration::from_secs(15);
@@ -144,14 +157,145 @@ pub fn step_system_clock(offset_s: f64) -> std::io::Result<()> {
     Ok(())
 }
 
+/// How the RTC write went.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RtcWrite {
+    Written(Duration),
+    /// Why, already worded for the log.
+    Failed(String),
+}
+
+/// Writes the system clock (just corrected) to the RTC: `hwclock -u -w`, waited for at
+/// most `RTC_WRITE_LIMIT`, then killed. A child stuck inside the kernel cannot be stopped
+/// by any signal; that case is reported as such (its write may still land later). The
+/// child is held by one long-lived runner rather than dropped, but with one write per boot
+/// nothing reaps it, so it stays a zombie until slot.advance exits (harmless).
+pub fn write_rtc() -> RtcWrite {
+    static RUNNER: OnceLock<Mutex<System>> = OnceLock::new();
+    let runner = RUNNER.get_or_init(|| Mutex::new(System::new()));
+    match runner.lock() {
+        Ok(mut r) => write_rtc_with(&mut *r, RTC_WRITE_LIMIT),
+        Err(_) => RtcWrite::Failed("hwclock not run (runner unavailable)".into()),
+    }
+}
+
+pub fn write_rtc_with(runner: &mut dyn Runner, limit: Duration) -> RtcWrite {
+    run_rtc_write(runner, &Cmd::quiet("hwclock", &["-u", "-w"]), limit)
+}
+
+fn run_rtc_write(runner: &mut dyn Runner, cmd: &Cmd, limit: Duration) -> RtcWrite {
+    let began = Instant::now();
+    let ran = runner.run(cmd, limit, &Cancel::new());
+    let took = began.elapsed().as_millis();
+    let limit = limit.as_millis();
+    if ran.ok() {
+        RtcWrite::Written(Duration::from_millis(took as u64))
+    } else if ran.timed_out && ran.still_running {
+        RtcWrite::Failed(format!(
+            "hwclock was still running at the {limit} ms limit and could not be stopped \
+             (stuck in the kernel); its write may still reach the RTC later"
+        ))
+    } else if ran.timed_out {
+        RtcWrite::Failed(format!(
+            "hwclock did not finish within {limit} ms and was killed"
+        ))
+    } else if let Some(code) = ran.code {
+        RtcWrite::Failed(format!("hwclock exited with {code} after {took} ms"))
+    } else if !ran.stdout.trim().is_empty() {
+        RtcWrite::Failed(format!("hwclock could not run: {}", ran.stdout.trim()))
+    } else {
+        RtcWrite::Failed(format!(
+            "hwclock ended without an exit code (stopped by a signal) after {took} ms"
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::run::Ran;
 
     const OUT: &str = "ntpd: bad address 'nowhere'\n\
         ntpd: reply from 192.168.4.1: offset:+36.350123 delay:0.004 status:0x24 strat:2\n\
         ntpd: reply from 203.0.113.9: offset:+36.347000 delay:0.042 status:0x24 strat:2\n\
         ntpd: reply from 198.51.100.4: offset:+99.000000 delay:0.090 status:0x24 strat:3\n";
+
+    struct Fake(Ran, Option<Cmd>);
+    impl Runner for Fake {
+        fn run(&mut self, cmd: &Cmd, limit: Duration, _: &Cancel) -> Ran {
+            assert_eq!(limit, RTC_WRITE_LIMIT);
+            assert_eq!(cmd.line(), "hwclock -u -w");
+            self.1 = Some(cmd.clone());
+            self.0.clone()
+        }
+    }
+
+    #[test]
+    fn the_rtc_is_written_with_hwclock_as_date_and_time_does() {
+        let mut f = Fake(
+            Ran {
+                code: Some(0),
+                ..Ran::default()
+            },
+            None,
+        );
+        assert!(matches!(
+            write_rtc_with(&mut f, RTC_WRITE_LIMIT),
+            RtcWrite::Written(_)
+        ));
+        assert_eq!(f.1.unwrap().line(), "hwclock -u -w");
+    }
+
+    fn failure(ran: Ran) -> String {
+        match write_rtc_with(&mut Fake(ran, None), RTC_WRITE_LIMIT) {
+            RtcWrite::Failed(why) => why,
+            w => panic!("reported as {w:?}"),
+        }
+    }
+
+    #[test]
+    fn every_rtc_failure_is_reported_as_failed_with_its_reason() {
+        let exit = failure(Ran {
+            code: Some(1),
+            ..Ran::default()
+        });
+        assert!(exit.contains("exited with 1"), "{exit}");
+        let killed = failure(Ran {
+            timed_out: true,
+            ..Ran::default()
+        });
+        assert!(killed.contains("was killed"), "{killed}");
+        let stuck = failure(Ran {
+            timed_out: true,
+            still_running: true,
+            ..Ran::default()
+        });
+        assert!(
+            stuck.contains("could not be stopped") && stuck.contains("may still reach the RTC"),
+            "{stuck}"
+        );
+        let missing = failure(Ran::failed("hwclock: No such file or directory"));
+        assert!(missing.contains("No such file"), "{missing}");
+        let signal = failure(Ran::default());
+        assert!(signal.contains("stopped by a signal"), "{signal}");
+    }
+
+    #[test]
+    fn a_hung_rtc_write_is_killed_at_the_limit_and_reported() {
+        let began = Instant::now();
+        let w = run_rtc_write(
+            &mut System::new(),
+            &Cmd::quiet("sleep", &["30"]),
+            Duration::from_millis(200),
+        );
+        assert!(began.elapsed() < Duration::from_secs(2));
+        match w {
+            RtcWrite::Failed(why) => {
+                assert!(why.contains("200 ms") && why.contains("killed"), "{why}")
+            }
+            w => panic!("reported as {w:?}"),
+        }
+    }
 
     #[test]
     fn replies_are_read_from_the_output() {
