@@ -36,6 +36,55 @@ pub struct MenuRow {
     pub value: Option<String>,
     /// Left and right change it (drawn with arrows when lit).
     pub changes: bool,
+    /// Can be selected. A row that cannot (the read-only Service row, or Syncthing while
+    /// Wi-Fi is not running) is skipped by the cursor.
+    pub selectable: bool,
+    /// Drawn greyed out (unavailable).
+    pub greyed: bool,
+}
+
+impl MenuRow {
+    /// A setting changed with Left, Right or A (Wi-Fi, Syncthing).
+    pub fn setting(label: &'static str, value: &str) -> MenuRow {
+        MenuRow {
+            label,
+            value: Some(value.to_string()),
+            changes: true,
+            selectable: true,
+            greyed: false,
+        }
+    }
+
+    /// A row that opens a screen (Networks, Web Interface).
+    pub fn opens(label: &'static str) -> MenuRow {
+        MenuRow {
+            label,
+            value: None,
+            changes: false,
+            selectable: true,
+            greyed: false,
+        }
+    }
+
+    /// A read-only value (Service).
+    pub fn shows(label: &'static str, value: &str) -> MenuRow {
+        MenuRow {
+            label,
+            value: Some(value.to_string()),
+            changes: false,
+            selectable: false,
+            greyed: false,
+        }
+    }
+
+    /// Unavailable: greyed out and skipped.
+    pub fn greyed(self) -> MenuRow {
+        MenuRow {
+            selectable: false,
+            greyed: true,
+            ..self
+        }
+    }
 }
 
 /// One network in the list.
@@ -99,6 +148,15 @@ pub enum NetView {
     Message {
         title: String,
         lines: Vec<String>,
+        legend: Vec<(&'static str, &'static str)>,
+    },
+    /// A screen of facts (the Web Interface screen): a heading, one large line (the
+    /// address), labelled values and small notes.
+    Info {
+        title: &'static str,
+        main: String,
+        pairs: Vec<(&'static str, String)>,
+        notes: Vec<String>,
         legend: Vec<(&'static str, &'static str)>,
     },
 }
@@ -336,6 +394,13 @@ pub fn net_face(view: &NetView) -> UndoFace {
             legend,
         } => draw_list(&mut c, rows, *selected, note.as_deref(), legend),
         NetView::Keyboard(k) => draw_keyboard(&mut c, k),
+        NetView::Info {
+            title,
+            main,
+            pairs,
+            notes,
+            legend,
+        } => draw_info(&mut c, title, main, pairs, notes, legend),
         NetView::Message {
             title,
             lines,
@@ -352,16 +417,43 @@ pub fn net_face(view: &NetView) -> UndoFace {
     c.face()
 }
 
+/// Where the first menu row sits: as in phase 1 for up to three rows; higher for the five
+/// rows with Syncthing On, so two status lines still fit above the legend.
+fn menu_top(rows: usize) -> f32 {
+    if rows <= 3 {
+        120.0
+    } else {
+        76.0
+    }
+}
+
+/// The gap between the last row and the status lines (smaller with five rows).
+fn status_gap(rows: usize) -> f32 {
+    if rows <= 3 {
+        28.0
+    } else {
+        16.0
+    }
+}
+
 fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String]) {
-    let top = 120.0;
+    let top = menu_top(rows.len());
     c.centred(40.0, "Network", 22.0, DIM, true);
     for (i, row) in rows.iter().enumerate() {
         let y = top + PITCH * i as f32;
-        let lit = i == selected;
+        let lit = i == selected && row.selectable;
         if lit {
             bar(c, y);
         }
-        c.print(EDGE_X, y + MENU_TEXT_DY, row.label, MENU_PX, MENU_INK, true);
+        let label_ink = if row.greyed { DIM } else { MENU_INK };
+        c.print(
+            EDGE_X,
+            y + MENU_TEXT_DY,
+            row.label,
+            MENU_PX,
+            label_ink,
+            true,
+        );
         if let Some(v) = &row.value {
             let ink = if lit { MENU_INK } else { DIM };
             let right = OUT_W as f32 - EDGE_X;
@@ -378,13 +470,13 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
             }
         }
     }
-    let mut y = top + PITCH * rows.len() as f32 + 28.0;
+    let mut y = top + PITCH * rows.len() as f32 + status_gap(rows.len());
     for line in status {
         c.centred(y, line, STATUS_PX, DIM, false);
         y += 28.0;
     }
     let mut legend = vec![("B", "Back")];
-    if let Some(row) = rows.get(selected) {
+    if let Some(row) = rows.get(selected).filter(|r| r.selectable) {
         legend.push(if row.changes {
             ("A", "Change")
         } else {
@@ -392,6 +484,42 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
         });
     }
     c.legend(&legend);
+}
+
+fn draw_info(
+    c: &mut Canvas,
+    title: &str,
+    main: &str,
+    pairs: &[(&str, String)],
+    notes: &[String],
+    legend: &[(&str, &str)],
+) {
+    c.centred(40.0, title, 22.0, DIM, true);
+    c.centred(104.0, main, 28.0, MENU_INK, false);
+    // Labels right-aligned to a centre line, values left-aligned after it.
+    let mid = 250.0;
+    let mut y = 176.0;
+    for (label, value) in pairs {
+        let w = c.measure(label, STATUS_PX, true);
+        c.print(mid - 16.0 - w, y + 3.0, label, STATUS_PX, DIM, true);
+        c.print_fit(
+            mid,
+            y,
+            value,
+            LIST_PX,
+            STATUS_PX,
+            OUT_W as f32 - EDGE_X - mid,
+            MENU_INK,
+            false,
+        );
+        y += 44.0;
+    }
+    let mut y = y.max(276.0) + 16.0;
+    for line in notes {
+        c.centred(y, line, NOTE_PX + 1.0, DIM, false);
+        y += 26.0;
+    }
+    c.legend(legend);
 }
 
 fn draw_list(
@@ -596,20 +724,30 @@ mod tests {
         kb.type_char('a');
         let views = [
             NetView::Menu {
-                rows: vec![
-                    MenuRow {
-                        label: "Wi-Fi",
-                        value: Some("On".into()),
-                        changes: true,
-                    },
-                    MenuRow {
-                        label: "Networks",
-                        value: None,
-                        changes: false,
-                    },
-                ],
+                rows: vec![MenuRow::setting("Wi-Fi", "On"), MenuRow::opens("Networks")],
                 selected: 0,
                 status: vec!["Connected to DropBearNet".into(), "192.168.4.37".into()],
+            },
+            NetView::Menu {
+                rows: vec![
+                    MenuRow::setting("Wi-Fi", "On"),
+                    MenuRow::opens("Networks"),
+                    MenuRow::setting("Syncthing", "On"),
+                    MenuRow::shows("Service", "Running"),
+                    MenuRow::opens("Web Interface"),
+                ],
+                selected: 2,
+                status: vec!["Connected to DropBearNet".into(), "192.168.4.37".into()],
+            },
+            NetView::Info {
+                title: "Web Interface",
+                main: "https://192.168.4.162:8384".into(),
+                pairs: vec![
+                    ("User", "slotadvance".into()),
+                    ("Password", "abacus zoom ablaze quarry dimple".into()),
+                ],
+                notes: vec!["Open it in a browser on the same Wi-Fi.".into()],
+                legend: vec![("B", "Back"), ("Y", "Reset")],
             },
             NetView::List {
                 rows: vec![ListRow {
@@ -656,17 +794,9 @@ mod tests {
     #[test]
     fn the_lit_menu_row_has_its_text_centred_in_the_bar() {
         for (selected, value) in [(0, "Off"), (0, "On"), (1, "On")] {
-            let mut rows = vec![MenuRow {
-                label: "Wi-Fi",
-                value: Some(value.into()),
-                changes: true,
-            }];
+            let mut rows = vec![MenuRow::setting("Wi-Fi", value)];
             if selected == 1 {
-                rows.push(MenuRow {
-                    label: "Networks",
-                    value: None,
-                    changes: false,
-                });
+                rows.push(MenuRow::opens("Networks"));
             }
             let f = net_face(&NetView::Menu {
                 rows,

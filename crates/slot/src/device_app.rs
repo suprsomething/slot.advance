@@ -133,7 +133,13 @@ pub fn run() {
     let mut frontend = Frontend::boot_with(Box::new(platform), sink);
     if let Some(jobs) = net {
         slot_net::set_global(&jobs);
-        frontend.set_net(Box::new(slot::net::WifiOn::new(jobs)));
+        // Syncthing (phase 2): its supervisor exists whenever Wi-Fi On runs, and starts
+        // Syncthing at once when the toggle is On, without waiting for a connection (P2-3).
+        let sync = slot_net::sync::Syncthing::spawn(&root);
+        if slot_store::read_slot_state(&root).syncthing {
+            sync.enable();
+        }
+        frontend.set_net(Box::new(slot::net::WifiOn::new(jobs).with_sync(sync)));
     }
     slot::boot_time::mark("frontend");
     frontend.upload_boot_faces(&mut compositor);

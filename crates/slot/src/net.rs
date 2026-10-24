@@ -6,6 +6,7 @@
 //! from the capped sleep gate.
 
 use slot_input::Millis;
+use slot_net::sync::{SyncStatus, Syncthing};
 use slot_net::{NetJobs, PasswordProblem, Status};
 
 /// The sleep gate's cap (O1): once this long has passed since the quiet request, a suspend
@@ -60,6 +61,20 @@ pub trait Net: Send {
 
     /// Wi-Fi switched Off in the menu: down at once; the driver goes at the next start.
     fn switch_off(&mut self) {}
+
+    /// Syncthing (0.5.0 phase 2): available only while Wi-Fi is running (P2-7).
+    fn sync_status(&self) -> Option<SyncStatus> {
+        None
+    }
+
+    /// The Syncthing toggle switched On (starts at once, P2-8) or Off (stops, bounded).
+    fn set_sync(&mut self, _on: bool) {}
+
+    /// The Network menu opened: refresh the Service row and the password shown.
+    fn sync_menu_opened(&mut self) {}
+
+    /// Reset Web Interface Credentials.
+    fn reset_sync_credentials(&mut self) {}
 }
 
 /// Wi-Fi Off.
@@ -67,15 +82,29 @@ pub struct NoNet;
 
 impl Net for NoNet {}
 
-/// Wi-Fi On.
+/// Wi-Fi On, with Syncthing's supervisor when there is one.
 pub struct WifiOn {
     jobs: NetJobs,
     off: bool,
+    sync: Option<Syncthing>,
 }
 
 impl WifiOn {
     pub fn new(jobs: NetJobs) -> WifiOn {
-        WifiOn { jobs, off: false }
+        WifiOn {
+            jobs,
+            off: false,
+            sync: None,
+        }
+    }
+
+    /// Adds Syncthing's supervisor. A reconnection after a wake triggers one health check
+    /// (design 3.4); nothing else ties Syncthing to the Wi-Fi thread.
+    pub fn with_sync(mut self, sync: Syncthing) -> WifiOn {
+        let s = sync.clone();
+        self.jobs.set_on_connected(move || s.reconnected());
+        self.sync = Some(sync);
+        self
     }
 }
 
@@ -101,6 +130,10 @@ impl Net for WifiOn {
     }
 
     fn before_poweroff(&mut self) {
+        // Syncthing first (it only talks to itself, bounded at 5 s), then the network.
+        if let Some(s) = &self.sync {
+            s.before_poweroff();
+        }
         self.jobs.before_poweroff();
     }
 
@@ -126,6 +159,35 @@ impl Net for WifiOn {
 
     fn switch_off(&mut self) {
         self.off = true;
+        if let Some(s) = &self.sync {
+            s.disable();
+        }
         self.jobs.switch_off();
+    }
+
+    fn sync_status(&self) -> Option<SyncStatus> {
+        self.sync.as_ref().filter(|_| !self.off).map(|s| s.status())
+    }
+
+    fn set_sync(&mut self, on: bool) {
+        if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
+            if on {
+                s.enable();
+            } else {
+                s.disable();
+            }
+        }
+    }
+
+    fn sync_menu_opened(&mut self) {
+        if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
+            s.menu_opened();
+        }
+    }
+
+    fn reset_sync_credentials(&mut self) {
+        if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
+            s.reset_credentials();
+        }
     }
 }

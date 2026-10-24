@@ -1739,7 +1739,12 @@ impl App {
             };
             return;
         };
-        match menu.input(action, self.net.as_mut(), self.state.wifi) {
+        match menu.input(
+            action,
+            self.net.as_mut(),
+            self.state.wifi,
+            self.state.syncthing,
+        ) {
             Effect::None => {}
             Effect::Close => {
                 self.net_menu = None;
@@ -1759,6 +1764,11 @@ impl App {
                 }
                 self.persist();
             }
+            Effect::SetSync(on) => {
+                eprintln!("slot: sync: set {}", if on { "on" } else { "off" });
+                self.state.syncthing = on;
+                self.persist();
+            }
             Effect::Restart => {
                 self.net_menu = None;
                 self.restarting = true;
@@ -1771,7 +1781,9 @@ impl App {
     /// What the Network screen shows, while it is open.
     pub fn net_view(&self) -> Option<slot_ui::NetView> {
         match (&self.phase, &self.net_menu) {
-            (Phase::Network, Some(m)) => Some(m.view(self.net.as_ref(), self.state.wifi)),
+            (Phase::Network, Some(m)) => {
+                Some(m.view(self.net.as_ref(), self.state.wifi, self.state.syncthing))
+            }
             _ => None,
         }
     }
@@ -1813,6 +1825,7 @@ impl App {
             QuickRow::About => self.phase = Phase::About,
             QuickRow::Network => {
                 self.net_menu = Some(crate::net_menu::NetMenu::new());
+                self.net.sync_menu_opened();
                 self.phase = Phase::Network;
             }
             QuickRow::Screen | QuickRow::Game => {

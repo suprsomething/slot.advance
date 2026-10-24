@@ -3,15 +3,19 @@
 //!
 //! ```text
 //! Network
-//! ├── Wi-Fi       Off / On
-//! └── Networks    >   nearby and saved networks; join with the on-screen keyboard; forget
+//! ├── Wi-Fi          Off / On
+//! ├── Networks       >   nearby and saved networks; join with the on-screen keyboard; forget
+//! ├── Syncthing      Off / On      (only while Wi-Fi is running; greyed otherwise, P2-7)
+//! ├── Service        Running / Stopped / Error   (read-only, skipped by the cursor)
+//! └── Web Interface  >   address, user and password; Reset (phase 2, design 8)
 //! ```
 //!
 //! Switching (A2): Off to On takes effect after a restart (offered at once); On to Off takes
-//! effect at once (`wlan0` down; the driver goes at the next start). Syncthing's rows
-//! arrive in phase 2.
+//! effect at once (`wlan0` down; the driver goes at the next start). Syncthing On starts it
+//! at once (P2-8); Off stops it (bounded, in the background).
 
 use slot_input::{Action, Btn};
+use slot_net::sync::{Service, Shown, SyncStatus};
 use slot_net::{JoinOutcome, Link, Problem, Security, Status};
 use slot_ui::{KeyOutcome, Keyboard, KeyboardView, ListRow, MenuRow, NetView};
 
@@ -30,6 +34,8 @@ pub enum Effect {
     SetWifi(bool),
     /// Restart now (to turn Wi-Fi on).
     Restart,
+    /// Save the Syncthing setting.
+    SetSync(bool),
 }
 
 /// One network in the list, from the scan and the saved list.
@@ -54,12 +60,24 @@ enum Note {
     Failed,
     Forget,
     Restart,
+    ResetCredentials,
+}
+
+/// The Network menu's rows, in order.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Row {
+    Wifi,
+    Networks,
+    Syncthing,
+    Service,
+    WebInterface,
 }
 
 enum Screen {
     Menu {
         row: usize,
     },
+    WebInterface,
     List {
         selected: Option<Vec<u8>>,
     },
@@ -139,12 +157,44 @@ impl NetMenu {
         }
     }
 
-    fn rows(net: &dyn Net) -> usize {
+    /// The rows shown, with what each one is.
+    fn rows(net: &dyn Net, wifi: bool, sync: bool) -> Vec<(Row, MenuRow)> {
+        let on_off = |b: bool| if b { "On" } else { "Off" };
+        let mut rows = vec![(Row::Wifi, MenuRow::setting("Wi-Fi", on_off(wifi)))];
+        let status = net.sync_status();
         if net.running() {
-            2
-        } else {
-            1
+            rows.push((Row::Networks, MenuRow::opens("Networks")));
         }
+        let toggle = MenuRow::setting("Syncthing", on_off(sync));
+        match &status {
+            Some(st) => {
+                rows.push((Row::Syncthing, toggle));
+                if sync {
+                    rows.push((Row::Service, MenuRow::shows("Service", service_word(st))));
+                    rows.push((Row::WebInterface, MenuRow::opens("Web Interface")));
+                }
+            }
+            None => rows.push((Row::Syncthing, toggle.greyed())),
+        }
+        rows
+    }
+
+    /// The selectable row at or next to `row`, moving by `step` (0 keeps it if selectable).
+    fn select(rows: &[(Row, MenuRow)], row: usize, step: isize) -> usize {
+        let n = rows.len() as isize;
+        let mut at = (row as isize).min(n - 1);
+        for _ in 0..n {
+            if step != 0 {
+                at = (at + step).rem_euclid(n);
+            }
+            if rows[at as usize].1.selectable {
+                return at as usize;
+            }
+            if step == 0 {
+                at = (at + 1).rem_euclid(n);
+            }
+        }
+        0
     }
 
     fn open_list(&mut self, net: &mut dyn Net) {
@@ -152,32 +202,67 @@ impl NetMenu {
         self.screen = Screen::List { selected: None };
     }
 
-    /// Handles a press. `wifi` is the saved Wi-Fi setting.
-    pub fn input(&mut self, action: Action, net: &mut dyn Net, wifi: bool) -> Effect {
+    /// Handles a press. `wifi` and `sync` are the saved Wi-Fi and Syncthing settings.
+    pub fn input(&mut self, action: Action, net: &mut dyn Net, wifi: bool, sync: bool) -> Effect {
         let back = matches!(action, Action::GbaDown(Btn::B) | Action::QuickMenu);
         match &mut self.screen {
             Screen::Menu { row } => {
-                let rows = Self::rows(net);
-                *row = (*row).min(rows - 1);
+                let rows = Self::rows(net, wifi, sync);
+                *row = Self::select(&rows, *row, 0);
+                let what = rows[*row].0;
                 match action {
                     _ if back => Effect::Close,
                     Action::GbaDown(Btn::Up) => {
-                        *row = (*row + rows - 1) % rows;
+                        *row = Self::select(&rows, *row, -1);
                         Effect::None
                     }
                     Action::GbaDown(Btn::Down) => {
-                        *row = (*row + 1) % rows;
+                        *row = Self::select(&rows, *row, 1);
                         Effect::None
                     }
-                    Action::GbaDown(Btn::Left | Btn::Right | Btn::A) if *row == 0 => {
+                    Action::GbaDown(Btn::Left | Btn::Right | Btn::A) if what == Row::Wifi => {
                         self.toggle_wifi(net, wifi)
                     }
-                    Action::GbaDown(Btn::A) if *row == 1 => {
+                    Action::GbaDown(Btn::Left | Btn::Right | Btn::A) if what == Row::Syncthing => {
+                        net.set_sync(!sync);
+                        Effect::SetSync(!sync)
+                    }
+                    Action::GbaDown(Btn::A) if what == Row::Networks => {
                         self.open_list(net);
+                        Effect::None
+                    }
+                    Action::GbaDown(Btn::A) if what == Row::WebInterface => {
+                        net.sync_menu_opened();
+                        self.screen = Screen::WebInterface;
                         Effect::None
                     }
                     _ => Effect::None,
                 }
+            }
+            Screen::WebInterface => {
+                match action {
+                    _ if back => {
+                        let rows = Self::rows(net, wifi, sync);
+                        let at = rows
+                            .iter()
+                            .position(|(r, _)| *r == Row::WebInterface)
+                            .unwrap_or(0);
+                        self.screen = Screen::Menu { row: at };
+                    }
+                    Action::GbaDown(Btn::Y)
+                        if net
+                            .sync_status()
+                            .is_some_and(|s| s.service == Service::Running) =>
+                    {
+                        self.screen = Screen::Message {
+                            note: Note::ResetCredentials,
+                            ssid: Vec::new(),
+                            kb: None,
+                        };
+                    }
+                    _ => {}
+                }
+                Effect::None
             }
             Screen::List { selected } => {
                 let Some(status) = net.status() else {
@@ -272,6 +357,15 @@ impl NetMenu {
             Screen::Message { note, ssid, kb } => {
                 let (note, ssid) = (*note, ssid.clone());
                 match (note, action) {
+                    (Note::ResetCredentials, Action::GbaDown(Btn::A)) => {
+                        net.reset_sync_credentials();
+                        self.screen = Screen::WebInterface;
+                        Effect::None
+                    }
+                    (Note::ResetCredentials, _) if back => {
+                        self.screen = Screen::WebInterface;
+                        Effect::None
+                    }
                     (Note::Restart, Action::GbaDown(Btn::A)) => Effect::Restart,
                     (Note::Restart, _) if back => {
                         self.screen = Screen::Menu { row: 0 };
@@ -421,28 +515,18 @@ impl NetMenu {
         };
     }
 
-    /// What to draw. `wifi` is the saved Wi-Fi setting.
-    pub fn view(&self, net: &dyn Net, wifi: bool) -> NetView {
+    /// What to draw. `wifi` and `sync` are the saved Wi-Fi and Syncthing settings.
+    pub fn view(&self, net: &dyn Net, wifi: bool, sync: bool) -> NetView {
         match &self.screen {
             Screen::Menu { row } => {
-                let mut rows = vec![MenuRow {
-                    label: "Wi-Fi",
-                    value: Some(if wifi { "On" } else { "Off" }.into()),
-                    changes: true,
-                }];
-                if net.running() {
-                    rows.push(MenuRow {
-                        label: "Networks",
-                        value: None,
-                        changes: false,
-                    });
-                }
+                let rows = Self::rows(net, wifi, sync);
                 NetView::Menu {
-                    selected: (*row).min(rows.len() - 1),
-                    rows,
+                    selected: Self::select(&rows, *row, 0),
+                    rows: rows.into_iter().map(|(_, r)| r).collect(),
                     status: status_lines(net, wifi),
                 }
             }
+            Screen::WebInterface => web_interface(net),
             Screen::List { selected } => {
                 let status = net.status().unwrap_or_default();
                 let list = entries(&status);
@@ -485,6 +569,57 @@ impl NetMenu {
             },
             Screen::Message { note, ssid, .. } => message(*note, &name(ssid)),
         }
+    }
+}
+
+fn service_word(s: &SyncStatus) -> &'static str {
+    match s.service {
+        Service::Running => "Running",
+        Service::Stopped => "Stopped",
+        Service::Error => "Error",
+    }
+}
+
+/// The Web Interface screen (design 8, I9): the address to type into a browser on another
+/// device, the user name and password (never a stale one), and Reset.
+fn web_interface(net: &dyn Net) -> NetView {
+    let sync = net.sync_status().unwrap_or_default();
+    let addr = match net.status().map(|s| s.link) {
+        Some(Link::Connected { addr: Some(a), .. }) => Some(a),
+        _ => None,
+    };
+    let main = match (addr, sync.service) {
+        (None, _) => "Not connected".to_string(),
+        (Some(a), Service::Running) => format!("https://{a}:{}", sync.port),
+        (Some(_), Service::Stopped) if sync.starting => "Syncthing is starting...".to_string(),
+        (Some(_), Service::Stopped) => "Syncthing is stopped".to_string(),
+        (Some(_), Service::Error) => "Syncthing has a problem".to_string(),
+    };
+    let pairs = match &sync.password {
+        Shown::Password(p) => vec![
+            ("User", slot_net::sync::creds::USER.to_string()),
+            ("Password", p.clone()),
+        ],
+        Shown::Changed => vec![("Login", "Changed in the web interface".to_string())],
+        Shown::Unknown => vec![("Password", "Not available yet".to_string())],
+    };
+    let mut notes = Vec::new();
+    if addr.is_some() && sync.service == Service::Running {
+        notes.push("Open it in a browser on a phone or computer on the same Wi-Fi.".to_string());
+        notes.push(
+            "The browser warns about the certificate the first time. That is expected.".to_string(),
+        );
+    }
+    let mut legend = vec![("B", "Back")];
+    if sync.service == Service::Running {
+        legend.push(("Y", "Reset"));
+    }
+    NetView::Info {
+        title: "Web Interface",
+        main,
+        pairs,
+        notes,
+        legend,
     }
 }
 
@@ -600,6 +735,14 @@ fn message(note: Note, name: &str) -> NetView {
             format!("Forget {name}?"),
             vec!["slot.advance will no longer join it by itself."],
             vec![("B", "Keep"), ("A", "Forget")],
+        ),
+        Note::ResetCredentials => (
+            "Reset the web interface login?".into(),
+            vec![
+                "A new password replaces the current one,",
+                "and the user name goes back to slotadvance.",
+            ],
+            vec![("B", "Keep"), ("A", "Reset")],
         ),
     };
     NetView::Message {
