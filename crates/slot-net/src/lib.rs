@@ -1,5 +1,8 @@
 //! slot.advance 0.5.0 networking: Wi-Fi On mode (implementation phase 1).
 //!
+//! Syncthing (implementation phase 2) is in `sync`: a supervisor on its own thread, started
+//! only with Wi-Fi On and the Syncthing toggle On.
+//!
 //! Wi-Fi Off (the default) never uses any of this: it follows 0.4.2 exactly (the driver is
 //! unloaded at 20 s by `slot-power`'s quiet job, and the lid, sleep and resume paths are
 //! untouched). Wi-Fi On keeps the driver loaded, joins saved networks in the background,
@@ -15,6 +18,7 @@ pub mod run;
 pub mod saved;
 pub mod scan;
 pub mod ssh;
+pub mod sync;
 pub mod sys;
 pub mod text;
 pub mod wifi;
