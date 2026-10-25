@@ -25,7 +25,7 @@ pub mod wifi;
 
 pub use jobs::{
     hand_over_for_link, set_global, take_back_after_link, JoinOutcome, Link, NetJobs, Problem,
-    Status,
+    Signal, Status, SIGNAL_FRESH,
 };
 pub use psk::PasswordProblem;
 pub use scan::{Security, Seen};
