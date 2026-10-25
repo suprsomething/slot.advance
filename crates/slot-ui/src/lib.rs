@@ -27,6 +27,7 @@ mod slot_chrome;
 pub mod text;
 mod title;
 mod toast;
+mod wifi_icon;
 
 pub use about::{
     about_face, about_lines, about_rows, card_size, draw_about, AboutFields, CardSpace, Logo,
@@ -97,3 +98,4 @@ pub use title::{
     TITLE_VIEW_W,
 };
 pub use toast::{toast_box, toast_face, toast_rect, Toast};
+pub use wifi_icon::{draw_wifi_icon, wifi_icon_face, wifi_icon_xy, WifiIcon, WIFI_H, WIFI_W};
