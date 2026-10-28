@@ -24,10 +24,18 @@ pub enum QuickRow {
     Titles,
     /// Wi-Fi (0.5.0), opening the Network menu.
     Network,
+    /// The in-game menu (0.5.0): back to the paused game.
+    Resume,
+    /// The in-game menu: the save-state switcher.
+    States,
+    /// The in-game menu: the settings menu, over the paused game.
+    Settings,
+    /// The in-game menu: save and eject, as holding MENU does.
+    ExitGame,
 }
 
 impl QuickRow {
-    pub const ALL: [QuickRow; 17] = [
+    pub const ALL: [QuickRow; 21] = [
         QuickRow::FastForward,
         QuickRow::FastForwardSound,
         QuickRow::Screen,
@@ -45,6 +53,19 @@ impl QuickRow {
         QuickRow::Sleep,
         QuickRow::Titles,
         QuickRow::Network,
+        QuickRow::Resume,
+        QuickRow::States,
+        QuickRow::Settings,
+        QuickRow::ExitGame,
+    ];
+
+    /// The in-game menu (0.5.0), opened by a tap of MENU in a game. The page and its rows
+    /// follow upstream slot's in-game menu (Brandon T. Kowalski, 91f6000).
+    pub const PLAY: [QuickRow; 4] = [
+        QuickRow::Resume,
+        QuickRow::States,
+        QuickRow::Settings,
+        QuickRow::ExitGame,
     ];
 
     pub const MAIN: [QuickRow; 6] = [
@@ -90,6 +111,9 @@ impl QuickRow {
             | QuickRow::Turbo
             | QuickRow::Rumble
             | QuickRow::EjectSave => &QuickRow::GAME,
+            QuickRow::Resume | QuickRow::States | QuickRow::Settings | QuickRow::ExitGame => {
+                &QuickRow::PLAY
+            }
             _ => &QuickRow::MAIN,
         }
     }
@@ -106,7 +130,19 @@ impl QuickRow {
         match self {
             QuickRow::Screen => Some(QuickRow::SCREEN[0]),
             QuickRow::Game => Some(QuickRow::GAME[0]),
+            QuickRow::Settings => Some(QuickRow::MAIN[0]),
             _ => None,
+        }
+    }
+
+    /// One level up in a game: the Settings pages climb as on the carousel, and the top of
+    /// Settings climbs to the in-game menu's Settings row. The in-game menu itself has no
+    /// parent (leaving it resumes the game).
+    pub fn parent_in_game(self) -> Option<QuickRow> {
+        match self.page() {
+            p if p == QuickRow::PLAY => None,
+            p if p == QuickRow::MAIN => Some(QuickRow::Settings),
+            _ => self.parent(),
         }
     }
 
@@ -133,6 +169,10 @@ impl QuickRow {
             QuickRow::Sleep => "Sleep",
             QuickRow::Titles => "Show Game Titles",
             QuickRow::Network => "Network",
+            QuickRow::Resume => "Resume",
+            QuickRow::States => "States",
+            QuickRow::Settings => "Settings",
+            QuickRow::ExitGame => "Exit Game",
         }
     }
 
@@ -144,17 +184,42 @@ impl QuickRow {
                 | QuickRow::Screen
                 | QuickRow::Game
                 | QuickRow::Network
+                | QuickRow::Resume
+                | QuickRow::States
+                | QuickRow::Settings
+                | QuickRow::ExitGame
         )
     }
 
     pub fn up(self) -> QuickRow {
-        let page = self.page();
-        page[(self.position() + page.len() - 1) % page.len()]
+        self.up_skipping(&[])
     }
 
     pub fn down(self) -> QuickRow {
+        self.down_skipping(&[])
+    }
+
+    /// The row above, wrapping, passing over `hidden` rows (rows a game leaves out).
+    pub fn up_skipping(self, hidden: &[QuickRow]) -> QuickRow {
+        self.step(hidden, false)
+    }
+
+    /// The row below, wrapping, passing over `hidden` rows.
+    pub fn down_skipping(self, hidden: &[QuickRow]) -> QuickRow {
+        self.step(hidden, true)
+    }
+
+    fn step(self, hidden: &[QuickRow], down: bool) -> QuickRow {
         let page = self.page();
-        page[(self.position() + 1) % page.len()]
+        let n = page.len();
+        let mut at = self.position();
+        for _ in 0..n {
+            at = if down { (at + 1) % n } else { (at + n - 1) % n };
+            if !hidden.contains(&page[at]) {
+                return page[at];
+            }
+        }
+        self
     }
 }
 
@@ -328,11 +393,13 @@ pub fn quick_caret_face(right: bool) -> UndoFace {
     UndoFace { rgba, w, h }
 }
 
-pub fn quick_legend_faces() -> [UndoFace; 3] {
+/// Back, Change, Open, and Resume (the in-game menu's B, which goes back to the game).
+pub fn quick_legend_faces() -> [UndoFace; 4] {
     [
         hint_face("B", "Back"),
         arrows_hint_face("Change"),
         hint_face("A", "Open"),
+        hint_face("B", "Resume"),
     ]
 }
 
@@ -340,7 +407,7 @@ pub struct QuickMenuFaces {
     pub labels: Vec<(TexId, u32, u32)>,
     pub values: Vec<[(TexId, u32, u32); 2]>,
     pub carets: [(TexId, u32, u32); 2],
-    pub legend: [(TexId, u32); 3],
+    pub legend: [(TexId, u32); 4],
 }
 
 pub struct QuickMenu<'a> {
@@ -348,6 +415,9 @@ pub struct QuickMenu<'a> {
     pub values: [Option<QuickValue>; QuickRow::ALL.len()],
     pub clock: Option<[(TexId, u32, u32); 2]>,
     pub faces: Option<&'a QuickMenuFaces>,
+    /// Rows left out of the page and its centring: in a game, Date & Time, the other
+    /// platform's rows, and Exit Game with one cart. Empty on the carousel.
+    pub hidden: &'a [QuickRow],
 }
 
 impl QuickMenu<'_> {
@@ -361,7 +431,7 @@ impl QuickMenu<'_> {
         });
         out.push(Draw::Rect {
             x: 0.0,
-            y: row_top(self.row) + BAR_INSET,
+            y: row_top(self.row, self.hidden) + BAR_INSET,
             w: OUT_W as f32,
             h: QUICK_PITCH - 2.0 * BAR_INSET,
             colour: edge(),
@@ -370,8 +440,8 @@ impl QuickMenu<'_> {
             return;
         };
         let (right, pad) = (OUT_W as f32 - QUICK_EDGE, MENU_PAD as f32);
-        for &row in self.row.page() {
-            let y = row_top(row) + TYPE_DROP;
+        for &row in self.row.page().iter().filter(|r| !self.hidden.contains(r)) {
+            let y = row_top(row, self.hidden) + TYPE_DROP;
             let lit = row == self.row;
             if let Some(&(tex, w, h)) = faces.labels.get(row.index()) {
                 push(out, tex, QUICK_EDGE - pad, y, w, h);
@@ -396,7 +466,11 @@ impl QuickMenu<'_> {
             push(out, tex, vx, y, w, h);
             push(out, left_tex, vx + pad - CARET_GAP - lw as f32, y, lw, lh);
         }
-        let [back, change, open] = faces.legend;
+        let [back, change, open, resume] = faces.legend;
+        let back = match self.row.page() == QuickRow::PLAY {
+            true => resume,
+            false => back,
+        };
         let other = if self.row.opens() { open } else { change };
         for (tex, w, x) in centred_hints(&[back, other], LEGEND_GAP) {
             push(out, tex, x, LEGEND_Y, w, HINT_H);
@@ -404,9 +478,13 @@ impl QuickMenu<'_> {
     }
 }
 
-fn row_top(row: QuickRow) -> f32 {
-    let top = (OUT_H as f32 - QUICK_PITCH * row.page().len() as f32) / 2.0;
-    top + QUICK_PITCH * row.position() as f32
+/// A row's top, with the page's shown rows centred as a block.
+fn row_top(row: QuickRow, hidden: &[QuickRow]) -> f32 {
+    let shown = |r: &&QuickRow| !hidden.contains(r);
+    let count = row.page().iter().filter(shown).count();
+    let above = row.page()[..row.position()].iter().filter(shown).count();
+    let top = (OUT_H as f32 - QUICK_PITCH * count as f32) / 2.0;
+    top + QUICK_PITCH * above as f32
 }
 
 fn push(out: &mut Vec<Draw>, tex: TexId, x: f32, y: f32, w: u32, h: u32) {

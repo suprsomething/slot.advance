@@ -109,6 +109,10 @@ fn the_rows_run_in_the_order_the_user_chose() {
             "Auto Save on Eject"
         ]
     );
+    assert_eq!(
+        QuickRow::PLAY.map(QuickRow::label),
+        ["Resume", "States", "Settings", "Exit Game"]
+    );
     let opens: Vec<QuickRow> = QuickRow::ALL.into_iter().filter(|r| r.opens()).collect();
     assert_eq!(
         opens,
@@ -117,7 +121,11 @@ fn the_rows_run_in_the_order_the_user_chose() {
             QuickRow::DateTime,
             QuickRow::About,
             QuickRow::Game,
-            QuickRow::Network
+            QuickRow::Network,
+            QuickRow::Resume,
+            QuickRow::States,
+            QuickRow::Settings,
+            QuickRow::ExitGame
         ]
     );
     for page in [
