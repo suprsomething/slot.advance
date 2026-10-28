@@ -225,7 +225,7 @@ impl App {
     /// The second press of a double tap of MENU. Whatever the first tap did to the menu is
     /// put back, then States opens: from the game when the menu was not open (B returns to
     /// the game, as before 0.5.0), or from the menu when it was (B returns to the menu).
-    fn double_tap_states(&mut self) {
+    pub(super) fn double_tap_states(&mut self) {
         if let Some((at, before)) = self.menu_tap.take() {
             if self.now().saturating_sub(at) <= MENU_DOUBLE_TAP_MS {
                 self.in_game = before;

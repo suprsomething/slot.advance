@@ -1779,7 +1779,8 @@ impl App {
                 Action::Eject => self.eject(),
                 Action::GameMenu => self.game_menu_shortcut(),
                 Action::QuickMenu => self.tap_in_game_menu(),
-                Action::Polaroids => self.open_polaroids(),
+                // A double tap: the first tap may have opened or closed the in-game menu.
+                Action::Polaroids => self.double_tap_states(),
                 Action::SaveState => self.save_state(),
                 Action::LoadState => self.load_newest(),
                 Action::RewindStart if !self.may_rewind() => self.refuse(),
