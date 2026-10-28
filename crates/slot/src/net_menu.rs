@@ -60,6 +60,8 @@ enum Note {
     Failed,
     Forget,
     Restart,
+    /// A restart asked for from a game whose game could not be saved first (0.5.0, D4).
+    RestartNotSaved,
     ResetCredentials,
 }
 
@@ -385,6 +387,10 @@ impl NetMenu {
                         self.screen = Screen::Menu { row: 0 };
                         Effect::None
                     }
+                    (Note::RestartNotSaved, _) if back || action == Action::GbaDown(Btn::A) => {
+                        self.screen = Screen::Menu { row: 0 };
+                        Effect::None
+                    }
                     (Note::Forget, Action::GbaDown(Btn::A)) => {
                         net.forget(&ssid);
                         self.screen = Screen::List { selected: None };
@@ -409,6 +415,16 @@ impl NetMenu {
                 }
             }
         }
+    }
+
+    /// The app refused a restart because the game in play could not be saved: say so, and
+    /// leave Wi-Fi to turn on at the next restart, as "Later" does.
+    pub fn restart_not_saved(&mut self) {
+        self.screen = Screen::Message {
+            note: Note::RestartNotSaved,
+            ssid: Vec::new(),
+            kb: None,
+        };
     }
 
     fn toggle_wifi(&mut self, net: &mut dyn Net, wifi: bool) -> Effect {
@@ -717,6 +733,14 @@ fn message(note: Note, name: &str) -> NetView {
             "Wi-Fi turns on after a restart".into(),
             vec!["Restart now, or carry on and restart later."],
             vec![("B", "Later"), ("A", "Restart")],
+        ),
+        Note::RestartNotSaved => (
+            "The game could not be saved".into(),
+            vec![
+                "So slot.advance has not restarted.",
+                "Wi-Fi turns on at the next restart.",
+            ],
+            vec![("B", "Back")],
         ),
         Note::Wpa3 => (
             format!("{name} uses WPA3 only"),

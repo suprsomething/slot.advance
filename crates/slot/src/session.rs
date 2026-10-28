@@ -151,7 +151,15 @@ impl Session {
         }
         actions.extend(self.gestures.tick(now));
         for action in actions {
+            let menu_was_open = self.app.in_game_open();
             self.act(action);
+            // A latched fast forward stops when the in-game menu opens, so it does not
+            // carry on by itself when the game resumes (upstream slot f63b009).
+            if !menu_was_open && self.app.in_game_open() && self.gestures.ff_latched() {
+                for stop in self.gestures.drop_ff_latch() {
+                    self.act(stop);
+                }
+            }
         }
         self.sync_pad();
     }
@@ -179,10 +187,12 @@ impl Session {
         if trace() {
             eprintln!("slot: {action:?} in {:?}", self.app.phase());
         }
+        // Fast forward and rewind cannot start behind the in-game menu.
+        let menu_open = self.app.in_game_open();
         match action {
-            Action::RewindStart => self.rewinding = true,
+            Action::RewindStart if !menu_open => self.rewinding = true,
             Action::RewindStop => self.rewinding = false,
-            Action::FfStart => self.fast = true,
+            Action::FfStart if !menu_open => self.fast = true,
             Action::FfStop => self.fast = false,
             _ => {}
         }
@@ -339,8 +349,13 @@ impl Session {
         matches!(self.app.phase(), Phase::Playing { .. }) && !self.held()
     }
 
+    /// Something over the game holds it paused and keeps its buttons: the power menu, the
+    /// SlotLink menu, the in-game menu (0.5.0) or a shutdown.
     fn held(&self) -> bool {
-        self.app.power_menu().is_some() || self.app.game_menu_open() || self.app.shutting_down()
+        self.app.power_menu().is_some()
+            || self.app.game_menu_open()
+            || self.app.in_game_open()
+            || self.app.shutting_down()
     }
 
     fn dozing(&self) -> bool {
