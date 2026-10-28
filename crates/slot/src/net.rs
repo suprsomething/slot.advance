@@ -5,8 +5,12 @@
 //! Wi-Fi On is `slot_net::NetJobs`, a background thread. The app never waits on it apart
 //! from the capped sleep gate.
 
+use std::time::Instant;
+
 use slot_input::Millis;
-use slot_net::{NetJobs, PasswordProblem, Status};
+use slot_net::sync::{SyncStatus, Syncthing};
+use slot_net::{Link, NetJobs, PasswordProblem, Status};
+use slot_ui::WifiIcon;
 
 /// The sleep gate's cap (O1): once this long has passed since the quiet request, a suspend
 /// goes ahead whether or not networking has finished going quiet. Set at checkpoint B
@@ -60,6 +64,27 @@ pub trait Net: Send {
 
     /// Wi-Fi switched Off in the menu: down at once; the driver goes at the next start.
     fn switch_off(&mut self) {}
+
+    /// Syncthing (0.5.0 phase 2): available only while Wi-Fi is running (P2-7).
+    fn sync_status(&self) -> Option<SyncStatus> {
+        None
+    }
+
+    /// The Syncthing toggle switched On (starts at once, P2-8) or Off (stops, bounded).
+    fn set_sync(&mut self, _on: bool) {}
+
+    /// The Network menu opened: refresh the Service row and the password shown.
+    fn sync_menu_opened(&mut self) {}
+
+    /// Read the current connection's signal in the background (returns at once).
+    fn poll_signal(&self) {}
+
+    /// The Web Interface screen is still open: check the credentials shown again, in the
+    /// background (returns at once).
+    fn sync_check_credentials(&self) {}
+
+    /// Reset Web Interface Credentials.
+    fn reset_sync_credentials(&mut self) {}
 }
 
 /// Wi-Fi Off.
@@ -67,15 +92,29 @@ pub struct NoNet;
 
 impl Net for NoNet {}
 
-/// Wi-Fi On.
+/// Wi-Fi On, with Syncthing's supervisor when there is one.
 pub struct WifiOn {
     jobs: NetJobs,
     off: bool,
+    sync: Option<Syncthing>,
 }
 
 impl WifiOn {
     pub fn new(jobs: NetJobs) -> WifiOn {
-        WifiOn { jobs, off: false }
+        WifiOn {
+            jobs,
+            off: false,
+            sync: None,
+        }
+    }
+
+    /// Adds Syncthing's supervisor. A reconnection after a wake triggers one health check
+    /// (design 3.4); nothing else ties Syncthing to the Wi-Fi thread.
+    pub fn with_sync(mut self, sync: Syncthing) -> WifiOn {
+        let s = sync.clone();
+        self.jobs.set_on_connected(move || s.reconnected());
+        self.sync = Some(sync);
+        self
     }
 }
 
@@ -101,6 +140,10 @@ impl Net for WifiOn {
     }
 
     fn before_poweroff(&mut self) {
+        // Syncthing first (it only talks to itself, bounded at 5 s), then the network.
+        if let Some(s) = &self.sync {
+            s.before_poweroff();
+        }
         self.jobs.before_poweroff();
     }
 
@@ -126,6 +169,97 @@ impl Net for WifiOn {
 
     fn switch_off(&mut self) {
         self.off = true;
+        if let Some(s) = &self.sync {
+            s.disable();
+        }
         self.jobs.switch_off();
+    }
+
+    fn sync_status(&self) -> Option<SyncStatus> {
+        self.sync.as_ref().filter(|_| !self.off).map(|s| s.status())
+    }
+
+    fn set_sync(&mut self, on: bool) {
+        if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
+            if on {
+                s.enable();
+            } else {
+                s.disable();
+            }
+        }
+    }
+
+    fn sync_menu_opened(&mut self) {
+        if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
+            s.menu_opened();
+        }
+    }
+
+    fn reset_sync_credentials(&mut self) {
+        if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
+            s.reset_credentials();
+        }
+    }
+
+    fn sync_check_credentials(&self) {
+        if let Some(s) = self.sync.as_ref().filter(|_| !self.off) {
+            s.check_credentials();
+        }
+    }
+
+    fn poll_signal(&self) {
+        if !self.off {
+            self.jobs.poll_signal();
+        }
+    }
+}
+
+/// The carousel polls the signal this often while it is on screen (approved 25 Oct 2026).
+pub const SIGNAL_POLL_MS: Millis = 30_000;
+
+/// What the carousel's Wi-Fi icon shows, and for which connection. `None` with Wi-Fi Off.
+/// Never a level without a fresh reading of the current connection.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WifiView {
+    pub icon: Option<WifiIcon>,
+    /// The network connected to, if any.
+    pub connected: Option<Vec<u8>>,
+    /// Connected, with no reading or one at least `SIGNAL_POLL_MS` old: time to poll.
+    pub poll_due: bool,
+}
+
+pub fn wifi_view(net: &dyn Net, now: Instant) -> WifiView {
+    let off = WifiView {
+        icon: None,
+        connected: None,
+        poll_due: false,
+    };
+    if !net.running() {
+        return off;
+    }
+    let Some(status) = net.status() else {
+        return off;
+    };
+    match status.link {
+        Link::Off => off,
+        Link::Connected { ssid, .. } => {
+            let fresh = status.signal.filter(|s| s.fresh(now));
+            let age = status
+                .signal
+                .map(|s| now.saturating_duration_since(s.at).as_millis() as Millis);
+            WifiView {
+                icon: Some(match fresh {
+                    Some(s) => WifiIcon::from_bars(slot_net::scan::bars(s.dbm)),
+                    None => WifiIcon::Unknown,
+                }),
+                connected: Some(ssid),
+                poll_due: age.is_none_or(|a| a >= SIGNAL_POLL_MS),
+            }
+        }
+        _ => WifiView {
+            icon: Some(WifiIcon::NotConnected),
+            connected: None,
+            poll_due: false,
+        },
     }
 }

@@ -28,6 +28,11 @@ const LIST_ROWS: usize = 6;
 /// are centred in the lit bar (to within half a pixel). The arrows keep their own place
 /// (`y + 6`), which already centres them.
 const MENU_TEXT_DY: f32 = 1.0;
+/// The network list's name and icon offsets within a row. Measured (25 Oct 2026): at 8 and
+/// 16 px the names sat 2 px low and the signal and lock icons 2 px high; at 6 and 18 both
+/// are centred in the bar (names measured on letters without descenders).
+const LIST_NAME_DY: f32 = 6.0;
+const LIST_ICON_DY: f32 = 18.0;
 
 /// One row of the Network menu.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -36,6 +41,68 @@ pub struct MenuRow {
     pub value: Option<String>,
     /// Left and right change it (drawn with arrows when lit).
     pub changes: bool,
+    /// Can be selected. A row that cannot (the read-only Service row, or Syncthing while
+    /// Wi-Fi is not running) is skipped by the cursor.
+    pub selectable: bool,
+    /// Drawn greyed out (unavailable).
+    pub greyed: bool,
+    /// Its value drawn in the bright menu ink even when not lit (Service: Error).
+    pub emphasis: bool,
+}
+
+impl MenuRow {
+    /// A setting changed with Left, Right or A (Wi-Fi, Syncthing).
+    pub fn setting(label: &'static str, value: &str) -> MenuRow {
+        MenuRow {
+            label,
+            value: Some(value.to_string()),
+            changes: true,
+            selectable: true,
+            greyed: false,
+            emphasis: false,
+        }
+    }
+
+    /// A row that opens a screen (Networks, Web Interface).
+    pub fn opens(label: &'static str) -> MenuRow {
+        MenuRow {
+            label,
+            value: None,
+            changes: false,
+            selectable: true,
+            greyed: false,
+            emphasis: false,
+        }
+    }
+
+    /// A read-only value (Service).
+    pub fn shows(label: &'static str, value: &str) -> MenuRow {
+        MenuRow {
+            label,
+            value: Some(value.to_string()),
+            changes: false,
+            selectable: false,
+            greyed: false,
+            emphasis: false,
+        }
+    }
+
+    /// Its value stands out: bright instead of the subdued grey (Service: Error).
+    pub fn emphasised(self) -> MenuRow {
+        MenuRow {
+            emphasis: true,
+            ..self
+        }
+    }
+
+    /// Unavailable: greyed out and skipped.
+    pub fn greyed(self) -> MenuRow {
+        MenuRow {
+            selectable: false,
+            greyed: true,
+            ..self
+        }
+    }
 }
 
 /// One network in the list.
@@ -81,8 +148,9 @@ impl KeyboardView {
     }
 }
 
-/// What a Network screen shows. The face is rebuilt whenever this changes.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What a Network screen shows. The face is rebuilt whenever this changes. Its `Debug`
+/// output never contains the Web Interface password (review N7).
+#[derive(Clone, PartialEq, Eq)]
 pub enum NetView {
     Menu {
         rows: Vec<MenuRow>,
@@ -101,6 +169,83 @@ pub enum NetView {
         lines: Vec<String>,
         legend: Vec<(&'static str, &'static str)>,
     },
+    /// A screen of facts (the Web Interface screen): a heading, one large line (the
+    /// address), labelled values and small notes.
+    Info {
+        title: &'static str,
+        main: String,
+        pairs: Vec<(&'static str, String)>,
+        notes: Vec<String>,
+        legend: Vec<(&'static str, &'static str)>,
+    },
+}
+
+impl std::fmt::Debug for NetView {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NetView::Menu {
+                rows,
+                selected,
+                status,
+            } => f
+                .debug_struct("Menu")
+                .field("rows", rows)
+                .field("selected", selected)
+                .field("status", status)
+                .finish(),
+            NetView::List {
+                rows,
+                selected,
+                note,
+                legend,
+            } => f
+                .debug_struct("List")
+                .field("rows", rows)
+                .field("selected", selected)
+                .field("note", note)
+                .field("legend", legend)
+                .finish(),
+            NetView::Keyboard(k) => f.debug_tuple("Keyboard").field(k).finish(),
+            NetView::Message {
+                title,
+                lines,
+                legend,
+            } => f
+                .debug_struct("Message")
+                .field("title", title)
+                .field("lines", lines)
+                .field("legend", legend)
+                .finish(),
+            NetView::Info {
+                title,
+                main,
+                pairs,
+                notes,
+                legend,
+            } => {
+                let shown: Vec<(&str, &str)> = pairs
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            *k,
+                            if *k == "Password" {
+                                "(hidden)"
+                            } else {
+                                v.as_str()
+                            },
+                        )
+                    })
+                    .collect();
+                f.debug_struct("Info")
+                    .field("title", title)
+                    .field("main", main)
+                    .field("pairs", &shown)
+                    .field("notes", notes)
+                    .field("legend", legend)
+                    .finish()
+            }
+        }
+    }
 }
 
 struct Canvas {
@@ -256,6 +401,22 @@ impl Canvas {
         );
     }
 
+    /// Centred on one line at `px`, shortened with "..." if it would not fit between the
+    /// margins (no shrinking).
+    fn centred_truncated(&mut self, y: f32, s: &str, px: f32, c: [u8; 3]) {
+        let max_w = self.w as f32 - 2.0 * EDGE_X;
+        let mut text = s.to_string();
+        if self.measure(&text, px, false) > max_w {
+            let mut cut: String = s.to_string();
+            while !cut.is_empty() && self.measure(&format!("{cut}..."), px, false) > max_w {
+                cut.pop();
+            }
+            text = format!("{}...", cut.trim_end());
+        }
+        let w = self.measure(&text, px, false);
+        self.print((self.w as f32 - w) / 2.0, y, &text, px, c, false);
+    }
+
     fn blit(&mut self, face: &UndoFace, x: u32, y: u32) {
         for row in 0..face.h {
             for col in 0..face.w {
@@ -336,6 +497,13 @@ pub fn net_face(view: &NetView) -> UndoFace {
             legend,
         } => draw_list(&mut c, rows, *selected, note.as_deref(), legend),
         NetView::Keyboard(k) => draw_keyboard(&mut c, k),
+        NetView::Info {
+            title,
+            main,
+            pairs,
+            notes,
+            legend,
+        } => draw_info(&mut c, title, main, pairs, notes, legend),
         NetView::Message {
             title,
             lines,
@@ -352,18 +520,40 @@ pub fn net_face(view: &NetView) -> UndoFace {
     c.face()
 }
 
+/// Where the first menu row sits: the same in every state (two, three or five rows), so
+/// switching Syncthing On or Off adds or removes rows below without moving the rows above
+/// (approved by Dean, 25 Oct 2026). The highest position that still leaves two status lines
+/// clear of the legend with five rows.
+pub const MENU_TOP: f32 = 84.0;
+/// From the last row to the first status line.
+const STATUS_GAP: f32 = 20.0;
+/// At most this many status lines under the menu; each is one line, never wrapped.
+pub const STATUS_LINES: usize = 2;
+
 fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String]) {
-    let top = 120.0;
+    let top = MENU_TOP;
     c.centred(40.0, "Network", 22.0, DIM, true);
     for (i, row) in rows.iter().enumerate() {
         let y = top + PITCH * i as f32;
-        let lit = i == selected;
+        let lit = i == selected && row.selectable;
         if lit {
             bar(c, y);
         }
-        c.print(EDGE_X, y + MENU_TEXT_DY, row.label, MENU_PX, MENU_INK, true);
+        let label_ink = if row.greyed { DIM } else { MENU_INK };
+        c.print(
+            EDGE_X,
+            y + MENU_TEXT_DY,
+            row.label,
+            MENU_PX,
+            label_ink,
+            true,
+        );
         if let Some(v) = &row.value {
-            let ink = if lit { MENU_INK } else { DIM };
+            let ink = if lit || (row.emphasis && !row.greyed) {
+                MENU_INK
+            } else {
+                DIM
+            };
             let right = OUT_W as f32 - EDGE_X;
             let w = c.measure(v, MENU_PX, true);
             if lit && row.changes {
@@ -378,13 +568,15 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
             }
         }
     }
-    let mut y = top + PITCH * rows.len() as f32 + 28.0;
-    for line in status {
-        c.centred(y, line, STATUS_PX, DIM, false);
+    let mut y = top + PITCH * rows.len() as f32 + STATUS_GAP;
+    for line in status.iter().take(STATUS_LINES) {
+        // One line each, at full size: a long network name is shortened with "...", never
+        // shrunk or wrapped (the stored name is unchanged).
+        c.centred_truncated(y, line, STATUS_PX, DIM);
         y += 28.0;
     }
     let mut legend = vec![("B", "Back")];
-    if let Some(row) = rows.get(selected) {
+    if let Some(row) = rows.get(selected).filter(|r| r.selectable) {
         legend.push(if row.changes {
             ("A", "Change")
         } else {
@@ -392,6 +584,68 @@ fn draw_menu(c: &mut Canvas, rows: &[MenuRow], selected: usize, status: &[String
         });
     }
     c.legend(&legend);
+}
+
+/// Where the Web Interface screen's labels end and its values begin: far enough left that
+/// the widest possible passphrase (five EFF words) fits on two lines at full size.
+const INFO_COLUMN: f32 = 196.0;
+const INFO_LINE: f32 = 32.0;
+const INFO_PAIR_GAP: f32 = 12.0;
+
+/// `text` split into lines no wider than `max_w` at `px`, breaking only between words.
+fn wrap_words(c: &Canvas, text: &str, px: f32, max_w: f32) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split(' ') {
+        match lines.last_mut() {
+            Some(l) if c.measure(&format!("{l} {word}"), px, false) <= max_w => {
+                l.push(' ');
+                l.push_str(word);
+            }
+            _ => lines.push(word.to_string()),
+        }
+    }
+    lines
+}
+
+fn draw_info(
+    c: &mut Canvas,
+    title: &str,
+    main: &str,
+    pairs: &[(&str, String)],
+    notes: &[String],
+    legend: &[(&str, &str)],
+) {
+    c.centred(40.0, title, 22.0, DIM, true);
+    c.centred(104.0, main, 28.0, MENU_INK, false);
+    // Labels right-aligned to the column, values left-aligned after it. A value too wide
+    // for one line wraps between words with a hanging indent: every line starts at the
+    // column, and the label stays on the first line only.
+    let max_w = OUT_W as f32 - EDGE_X - INFO_COLUMN;
+    let mut y = 172.0;
+    for (label, value) in pairs {
+        let w = c.measure(label, STATUS_PX, true);
+        c.print(INFO_COLUMN - 16.0 - w, y + 3.0, label, STATUS_PX, DIM, true);
+        for line in wrap_words(c, value, LIST_PX, max_w) {
+            c.print_fit(
+                INFO_COLUMN,
+                y,
+                &line,
+                LIST_PX,
+                STATUS_PX,
+                max_w,
+                MENU_INK,
+                false,
+            );
+            y += INFO_LINE;
+        }
+        y += INFO_PAIR_GAP;
+    }
+    let mut y = y.max(276.0) + 14.0;
+    for line in notes {
+        c.centred(y, line, NOTE_PX + 1.0, DIM, false);
+        y += 26.0;
+    }
+    c.legend(legend);
 }
 
 fn draw_list(
@@ -419,12 +673,12 @@ fn draw_list(
         let mut x = right;
         if let Some(b) = row.bars {
             x -= 20.0;
-            c.bars(x, y + 16.0, b, ink);
+            c.bars(x, y + LIST_ICON_DY, b, ink);
         }
         x -= 10.0;
         if row.locked {
             x -= 12.0;
-            c.lock(x, y + 16.0, ink);
+            c.lock(x, y + LIST_ICON_DY, ink);
             x -= 10.0;
         }
         if let Some(tag) = row.tag {
@@ -435,7 +689,7 @@ fn draw_list(
         }
         c.print_fit(
             EDGE_X,
-            y + 8.0,
+            y + LIST_NAME_DY,
             &row.name,
             LIST_PX,
             16.0,
@@ -596,20 +850,30 @@ mod tests {
         kb.type_char('a');
         let views = [
             NetView::Menu {
-                rows: vec![
-                    MenuRow {
-                        label: "Wi-Fi",
-                        value: Some("On".into()),
-                        changes: true,
-                    },
-                    MenuRow {
-                        label: "Networks",
-                        value: None,
-                        changes: false,
-                    },
-                ],
+                rows: vec![MenuRow::setting("Wi-Fi", "On"), MenuRow::opens("Networks")],
                 selected: 0,
                 status: vec!["Connected to DropBearNet".into(), "192.168.4.37".into()],
+            },
+            NetView::Menu {
+                rows: vec![
+                    MenuRow::setting("Wi-Fi", "On"),
+                    MenuRow::opens("Networks"),
+                    MenuRow::setting("Syncthing", "On"),
+                    MenuRow::shows("Service", "Running"),
+                    MenuRow::opens("Web Interface"),
+                ],
+                selected: 2,
+                status: vec!["Connected to DropBearNet".into(), "192.168.4.37".into()],
+            },
+            NetView::Info {
+                title: "Web Interface",
+                main: "https://192.168.4.162:8384".into(),
+                pairs: vec![
+                    ("User", "slotadvance".into()),
+                    ("Password", "abacus zoom ablaze quarry dimple".into()),
+                ],
+                notes: vec!["Open it in a browser on the same Wi-Fi.".into()],
+                legend: vec![("B", "Back"), ("Y", "Reset")],
             },
             NetView::List {
                 rows: vec![ListRow {
@@ -656,17 +920,9 @@ mod tests {
     #[test]
     fn the_lit_menu_row_has_its_text_centred_in_the_bar() {
         for (selected, value) in [(0, "Off"), (0, "On"), (1, "On")] {
-            let mut rows = vec![MenuRow {
-                label: "Wi-Fi",
-                value: Some(value.into()),
-                changes: true,
-            }];
+            let mut rows = vec![MenuRow::setting("Wi-Fi", value)];
             if selected == 1 {
-                rows.push(MenuRow {
-                    label: "Networks",
-                    value: None,
-                    changes: false,
-                });
+                rows.push(MenuRow::opens("Networks"));
             }
             let f = net_face(&NetView::Menu {
                 rows,
@@ -687,6 +943,287 @@ mod tests {
                     "row {selected} columns {x0}..{x1}: ink {top}..{bottom}, bar {bar_top}..{bar_bottom}, {off} px off centre"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn debug_output_never_contains_the_web_interface_password() {
+        let v = NetView::Info {
+            title: "Web Interface",
+            main: "https://192.168.4.162:8384".into(),
+            pairs: vec![("Password", "secret words here".into())],
+            notes: vec![],
+            legend: vec![],
+        };
+        assert!(!format!("{v:?}").contains("secret"));
+    }
+
+    fn ink_rows(f: &UndoFace, y0: u32, y1: u32) -> Vec<u32> {
+        let bg = theme().opening;
+        (y0..y1)
+            .filter(|&y| {
+                (0..f.w).any(|x| {
+                    let at = ((y * f.w + x) * 4) as usize;
+                    f.rgba[at..at + 3] != bg
+                })
+            })
+            .collect()
+    }
+
+    fn menu(rows: Vec<MenuRow>, status: Vec<String>) -> UndoFace {
+        net_face(&NetView::Menu {
+            rows,
+            selected: 0,
+            status,
+        })
+    }
+
+    /// The brightest ink in the value column (right half) of the given row.
+    fn value_ink(f: &UndoFace, row: usize) -> u32 {
+        let y0 = (MENU_TOP + PITCH * row as f32) as u32;
+        let mut best = 0;
+        for y in y0..y0 + PITCH as u32 {
+            for x in f.w / 2..f.w {
+                let at = ((y * f.w + x) * 4) as usize;
+                let p = &f.rgba[at..at + 3];
+                best = best.max(p[0] as u32 + p[1] as u32 + p[2] as u32);
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn an_emphasised_value_is_drawn_bright_and_others_subdued() {
+        let rows = |service: MenuRow| {
+            vec![
+                MenuRow::setting("Wi-Fi", "On"),
+                MenuRow::opens("Networks"),
+                MenuRow::setting("Syncthing", "On"),
+                service,
+                MenuRow::opens("Web Interface"),
+            ]
+        };
+        let error = menu(
+            rows(MenuRow::shows("Service", "Error").emphasised()),
+            vec![],
+        );
+        let running = menu(rows(MenuRow::shows("Service", "Running")), vec![]);
+        let bright = MENU_INK.iter().map(|&v| v as u32).sum::<u32>();
+        let dim = DIM.iter().map(|&v| v as u32).sum::<u32>();
+        assert_eq!(value_ink(&error, 3), bright);
+        assert_eq!(value_ink(&running, 3), dim);
+        // Greyed wins over emphasis: an unavailable row never stands out.
+        let greyed = menu(
+            rows(MenuRow::shows("Service", "Error").emphasised().greyed()),
+            vec![],
+        );
+        assert_eq!(value_ink(&greyed, 3), dim);
+    }
+
+    fn info(pairs: Vec<(&'static str, String)>, notes: Vec<String>) -> UndoFace {
+        net_face(&NetView::Info {
+            title: "Web Interface",
+            main: "https://192.168.4.162:8384".into(),
+            pairs,
+            notes,
+            legend: vec![("B", "Back"), ("Y", "Reset")],
+        })
+    }
+
+    /// Leftmost and rightmost bright (value) ink between rows y0 and y1.
+    fn value_span(f: &UndoFace, y0: u32, y1: u32) -> Option<(u32, u32)> {
+        let mut span: Option<(u32, u32)> = None;
+        for y in y0..y1 {
+            for x in 0..f.w {
+                let at = ((y * f.w + x) * 4) as usize;
+                let p = &f.rgba[at..at + 3];
+                if p.iter().zip(MENU_INK).all(|(&a, b)| a.abs_diff(b) < 40) {
+                    span = Some(match span {
+                        Some((l, r)) => (l.min(x), r.max(x)),
+                        None => (x, x),
+                    });
+                }
+            }
+        }
+        span
+    }
+
+    #[test]
+    fn every_possible_passphrase_fits_on_two_full_size_lines() {
+        // Greedy wrapping puts at least two words on the first line and the rest on the
+        // second as long as any three words fit on one line, so the three widest words
+        // (by pixels, at the size drawn) decide it for all 7,776^5 passphrases.
+        let c = Canvas::new();
+        let max_w = OUT_W as f32 - EDGE_X - INFO_COLUMN;
+        let list = include_str!("../../slot-net/src/sync/eff_large_wordlist.txt");
+        let mut words: Vec<(f32, &str)> = list
+            .lines()
+            .filter_map(|l| l.split('\t').nth(1))
+            .map(|w| (c.measure(w, LIST_PX, false), w))
+            .collect();
+        assert_eq!(words.len(), 7776);
+        words.sort_by(|a, b| b.0.total_cmp(&a.0));
+        let widest3 = format!("{} {} {}", words[0].1, words[1].1, words[2].1);
+        assert!(c.measure(&widest3, LIST_PX, false) <= max_w, "{widest3}");
+        let widest5 = format!("{widest3} {} {}", words[3].1, words[4].1);
+        let lines = wrap_words(&c, &widest5, LIST_PX, max_w);
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert_eq!(lines.join(" "), widest5, "never split inside a word");
+        for l in &lines {
+            assert!(c.measure(l, LIST_PX, false) <= max_w, "shrunk or cut: {l}");
+        }
+    }
+
+    #[test]
+    fn a_wrapped_passphrase_hangs_under_its_first_word() {
+        let pw = "mammogram womanhood amendment endowment commodore";
+        let f = info(
+            vec![("User", "slotadvance".into()), ("Password", pw.into())],
+            vec![
+                "Open it in a browser on a phone or computer on the same Wi-Fi.".into(),
+                "The browser warns about this handheld's self-signed certificate.".into(),
+                "That is expected here: accept it for this address only.".into(),
+            ],
+        );
+        // User at y 172, Password's lines at 216 and 248 (32 apart).
+        let user = value_span(&f, 172, 204).unwrap();
+        let first = value_span(&f, 216, 246).unwrap();
+        let second = value_span(&f, 248, 278).unwrap();
+        // Both lines and the user name start at the column (glyph side bearing aside).
+        for (l, _) in [user, first, second] {
+            assert!(
+                (INFO_COLUMN as u32..INFO_COLUMN as u32 + 4).contains(&l),
+                "{l}"
+            );
+        }
+        assert!(first.0.abs_diff(second.0) <= 2, "{first:?} {second:?}");
+        assert!(first.1 <= OUT_W - EDGE_X as u32 && second.1 <= OUT_W - EDGE_X as u32);
+        // No third line.
+        assert_eq!(value_span(&f, 280, 300), None);
+        // Labels right-aligned, ending 16 px before the column, on the first line only.
+        let dim_right = |y0: u32, y1: u32| {
+            let mut r = 0;
+            for y in y0..y1 {
+                for x in 0..INFO_COLUMN as u32 {
+                    let at = ((y * f.w + x) * 4) as usize;
+                    if f.rgba[at..at + 3]
+                        .iter()
+                        .zip(DIM)
+                        .all(|(&a, b)| a.abs_diff(b) < 20)
+                    {
+                        r = r.max(x);
+                    }
+                }
+            }
+            r
+        };
+        let (u, p) = (dim_right(172, 204), dim_right(216, 246));
+        assert!(u.abs_diff(p) <= 2 && u < INFO_COLUMN as u32 - 12, "{u} {p}");
+        assert_eq!(dim_right(250, 278), 0, "PASSWORD on the first line only");
+        // The three notes end clear of the legend.
+        let legend_top = LEGEND_Y;
+        let ink = ink_rows(&f, 300, OUT_H);
+        let notes_end = ink
+            .iter()
+            .copied()
+            .filter(|&y| y < legend_top)
+            .max()
+            .unwrap();
+        assert!(notes_end + 10 < legend_top, "{notes_end}");
+    }
+
+    #[test]
+    fn the_first_row_stays_put_as_rows_are_added() {
+        let two = vec![
+            MenuRow::setting("Wi-Fi", "Off"),
+            MenuRow::setting("Syncthing", "Off").greyed(),
+        ];
+        let three = vec![
+            MenuRow::setting("Wi-Fi", "On"),
+            MenuRow::opens("Networks"),
+            MenuRow::setting("Syncthing", "Off"),
+        ];
+        let five = vec![
+            MenuRow::setting("Wi-Fi", "On"),
+            MenuRow::opens("Networks"),
+            MenuRow::setting("Syncthing", "On"),
+            MenuRow::shows("Service", "Running"),
+            MenuRow::opens("Web Interface"),
+        ];
+        let first_bar = |rows: Vec<MenuRow>| {
+            let f = menu(rows, vec![]);
+            let edge = theme().edge;
+            (0..f.h)
+                .find(|&y| {
+                    let at = ((y * f.w + 2) * 4) as usize;
+                    f.rgba[at..at + 3] == edge
+                })
+                .unwrap()
+        };
+        let y = first_bar(two);
+        assert_eq!(y, first_bar(three));
+        assert_eq!(y, first_bar(five));
+        assert_eq!(y, (MENU_TOP + 4.0) as u32);
+    }
+
+    #[test]
+    fn a_long_network_name_never_adds_lines_or_reaches_the_legend() {
+        let five = || {
+            vec![
+                MenuRow::setting("Wi-Fi", "On"),
+                MenuRow::opens("Networks"),
+                MenuRow::setting("Syncthing", "On"),
+                MenuRow::shows("Service", "Running"),
+                MenuRow::opens("Web Interface"),
+            ]
+        };
+        let wide = "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"; // 32 bytes, the widest a name can be
+        let f = menu(
+            five(),
+            vec![
+                format!("Connected to {wide}"),
+                "192.168.100.200".into(),
+                "an unexpected third line".into(),
+            ],
+        );
+        let rows = ink_rows(&f, (MENU_TOP + PITCH * 5.0) as u32, LEGEND_Y);
+        // Two lines of text (each a run of rows), ending clear of the legend.
+        let runs = rows.windows(2).filter(|w| w[1] > w[0] + 1).count() + 1;
+        assert_eq!(runs, 2, "{rows:?}");
+        assert!(*rows.last().unwrap() + 8 < LEGEND_Y, "{rows:?}");
+        // At full size, shortened: the line stays inside the margins.
+        let bg = theme().opening;
+        let first = rows[0];
+        let xs: Vec<u32> = (0..f.w)
+            .filter(|&x| {
+                let at = ((first * f.w + x) * 4) as usize;
+                f.rgba[at..at + 3] != bg
+            })
+            .collect();
+        assert!(xs[0] >= EDGE_X as u32 && *xs.last().unwrap() <= OUT_W - EDGE_X as u32);
+    }
+
+    #[test]
+    fn network_names_and_icons_are_centred_in_the_list_rows() {
+        let f = net_face(&NetView::List {
+            rows: vec![ListRow {
+                name: "Cafe".into(),
+                bars: Some(2),
+                locked: true,
+                tag: Some("Saved"),
+            }],
+            selected: 0,
+            note: None,
+            legend: vec![],
+        });
+        // "Cafe" has no descenders, so its ink is the letters themselves.
+        for (x0, x1, what) in [(20, 120, "name"), (640, 700, "icons")] {
+            let ((top, bottom), (bar_top, bar_bottom)) = ink_and_bar(&f, x0, x1);
+            let off = (top + bottom) as f32 / 2.0 - (bar_top + bar_bottom) as f32 / 2.0;
+            assert!(
+                off.abs() <= 1.0,
+                "{what}: ink {top}..{bottom}, bar {bar_top}..{bar_bottom}, {off} px"
+            );
         }
     }
 

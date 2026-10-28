@@ -1,5 +1,6 @@
 //! 0.5.0 Network menu (phase 1b): the Wi-Fi setting (A2), the network list, the on-screen
-//! keyboard and the join flow, with a stand-in for the network thread.
+//! keyboard and the join flow; and (phase 2) the Syncthing, Service and Web Interface rows,
+//! with a stand-in for the network thread and Syncthing's supervisor.
 
 mod common;
 
@@ -9,6 +10,7 @@ use common::tmp_root_with_carts;
 use slot::app::{App, Phase};
 use slot::net::Net;
 use slot_input::{Action, Btn};
+use slot_net::sync::{Service, Shown, SyncStatus};
 use slot_net::{JoinOutcome, Link, PasswordProblem, Security, Seen, Status};
 use slot_store::read_slot_state;
 use slot_ui::{NetView, QuickRow, QuickValue};
@@ -18,6 +20,8 @@ struct State {
     running: bool,
     status: Status,
     calls: Vec<String>,
+    /// Syncthing's supervisor (present whenever Wi-Fi On runs, as on the device).
+    sync: Option<SyncStatus>,
 }
 
 #[derive(Clone, Default)]
@@ -68,7 +72,25 @@ impl Net for Fake {
     fn switch_off(&mut self) {
         let mut s = self.s();
         s.running = false;
+        s.sync = None;
         s.calls.push("switch off".into());
+    }
+    fn sync_status(&self) -> Option<SyncStatus> {
+        self.s().sync.clone()
+    }
+    fn set_sync(&mut self, on: bool) {
+        self.s()
+            .calls
+            .push(format!("sync {}", if on { "on" } else { "off" }));
+    }
+    fn sync_menu_opened(&mut self) {
+        self.s().calls.push("sync menu".into());
+    }
+    fn reset_sync_credentials(&mut self) {
+        self.s().calls.push("sync reset".into());
+    }
+    fn sync_check_credentials(&self) {
+        self.s().calls.push("sync check".into());
     }
 }
 
@@ -109,8 +131,52 @@ fn on_carousel(wifi_on: bool) -> T {
             seen("Office", -66, Security::Wpa3Only),
         ];
     }
+    if wifi_on {
+        net.s().sync = Some(SyncStatus::default());
+    }
     app.set_net(Box::new(net.clone()));
     T { _d: d, app, net }
+}
+
+/// Wi-Fi On, Syncthing switched On and running.
+fn with_syncthing() -> T {
+    let d = tmp_root_with_carts(&["Emerald", "Ruby"]);
+    common::clocked(d.path());
+    common::wifi_on(d.path());
+    let mut st = read_slot_state(d.path());
+    st.syncthing = true;
+    slot_store::write_slot_state(d.path(), &st).unwrap();
+    let mut app = common::boot(d.path());
+    let net = Fake::default();
+    {
+        let mut s = net.s();
+        s.running = true;
+        s.status.link = Link::Connected {
+            ssid: b"Home".to_vec(),
+            addr: Some("192.168.4.162".parse().unwrap()),
+        };
+        s.sync = Some(SyncStatus {
+            service: Service::Running,
+            password: Shown::Password("abacus zoom ablaze quarry dimple".into()),
+            ..SyncStatus::default()
+        });
+    }
+    app.set_net(Box::new(net.clone()));
+    T { _d: d, app, net }
+}
+
+fn labels(v: &NetView) -> Vec<&'static str> {
+    match v {
+        NetView::Menu { rows, .. } => rows.iter().map(|r| r.label).collect(),
+        v => panic!("{v:?}"),
+    }
+}
+
+fn selected_label(v: &NetView) -> &'static str {
+    match v {
+        NetView::Menu { rows, selected, .. } => rows[*selected].label,
+        v => panic!("{v:?}"),
+    }
 }
 
 impl T {
@@ -199,12 +265,18 @@ fn with_wifi_off_the_menu_offers_only_the_switch() {
     let mut t = on_carousel(false);
     t.open_network();
     match t.view() {
-        NetView::Menu { rows, .. } => {
-            assert_eq!(rows.len(), 1);
+        NetView::Menu { rows, selected, .. } => {
+            assert_eq!(rows.len(), 2);
             assert_eq!(rows[0].value.as_deref(), Some("Off"));
+            // Syncthing is shown greyed out and cannot be selected (P2-7).
+            assert_eq!(rows[1].label, "Syncthing");
+            assert!(rows[1].greyed && !rows[1].selectable);
+            assert_eq!(selected, 0);
         }
         v => panic!("{v:?}"),
     }
+    t.press(Btn::Down);
+    assert_eq!(selected_label(&t.view()), "Wi-Fi", "the cursor skips it");
 }
 
 #[test]
@@ -244,10 +316,13 @@ fn switching_off_takes_effect_at_once_and_slotlink_follows() {
     let mut t = on_carousel(true);
     t.open_network();
     t.press(Btn::Left);
-    assert_eq!(t.net.calls(), ["switch off"]);
+    assert_eq!(t.net.calls(), ["sync menu", "switch off"]);
     assert!(!read_slot_state(t.app.root().unwrap()).wifi);
     match t.view() {
-        NetView::Menu { rows, .. } => assert_eq!(rows.len(), 1, "Networks goes with it"),
+        NetView::Menu { rows, .. } => {
+            assert_eq!(rows.len(), 2, "Networks goes with it");
+            assert!(rows[1].greyed, "and Syncthing is unavailable");
+        }
         v => panic!("{v:?}"),
     }
 }
@@ -258,7 +333,10 @@ fn the_status_line_names_the_network_and_address() {
     t.open_network();
     match t.view() {
         NetView::Menu { status, rows, .. } => {
-            assert_eq!(rows.len(), 2);
+            assert_eq!(rows.len(), 3);
+            assert_eq!(rows[2].label, "Syncthing");
+            assert!(rows[2].selectable && !rows[2].greyed);
+            assert_eq!(rows[2].value.as_deref(), Some("Off"));
             assert_eq!(status, ["Connected to Home", "192.168.4.37"]);
         }
         v => panic!("{v:?}"),
@@ -271,7 +349,7 @@ fn the_list_puts_the_connected_network_first_and_saved_ones_out_of_range_last() 
     t.open_network();
     t.press(Btn::Down);
     t.press(Btn::A);
-    assert_eq!(t.net.calls(), ["scan"]);
+    assert_eq!(t.net.calls(), ["sync menu", "scan"]);
     assert_eq!(
         t.list_names(),
         ["Home", "Neighbour", "Office", "Cafe", "Away"]
@@ -439,4 +517,228 @@ fn the_network_menu_counts_as_no_game_seated() {
     let mut t = on_carousel(true);
     t.open_network();
     assert!(t.app.no_game_seated());
+}
+
+#[test]
+fn switching_syncthing_on_saves_it_and_starts_it_at_once() {
+    let mut t = on_carousel(true);
+    t.open_network();
+    assert_eq!(t.net.calls(), ["sync menu"]);
+    t.press(Btn::Down);
+    t.press(Btn::Down);
+    assert_eq!(selected_label(&t.view()), "Syncthing");
+    t.press(Btn::Right);
+    assert!(read_slot_state(t.app.root().unwrap()).syncthing, "saved");
+    assert_eq!(t.net.calls(), ["sync menu", "sync on"]);
+    assert_eq!(
+        labels(&t.view()),
+        ["Wi-Fi", "Networks", "Syncthing", "Service", "Web Interface"]
+    );
+    t.press(Btn::A);
+    assert!(!read_slot_state(t.app.root().unwrap()).syncthing);
+    assert_eq!(t.net.calls().last().unwrap(), "sync off");
+    assert_eq!(labels(&t.view()), ["Wi-Fi", "Networks", "Syncthing"]);
+}
+
+#[test]
+fn the_service_row_is_read_only_and_skipped() {
+    let mut t = with_syncthing();
+    t.open_network();
+    match t.view() {
+        NetView::Menu { rows, .. } => {
+            assert_eq!(rows[3].label, "Service");
+            assert_eq!(rows[3].value.as_deref(), Some("Running"));
+            assert!(!rows[3].selectable);
+        }
+        v => panic!("{v:?}"),
+    }
+    t.press(Btn::Down);
+    t.press(Btn::Down);
+    assert_eq!(selected_label(&t.view()), "Syncthing");
+    t.press(Btn::Down);
+    assert_eq!(selected_label(&t.view()), "Web Interface");
+    t.press(Btn::Up);
+    assert_eq!(selected_label(&t.view()), "Syncthing");
+    for (service, word) in [
+        (Service::Stopped, "Stopped"),
+        (Service::Error, "Error"),
+        (Service::Running, "Running"),
+    ] {
+        t.net.s().sync.as_mut().unwrap().service = service;
+        match t.view() {
+            NetView::Menu { rows, .. } => {
+                assert_eq!(rows[3].value.as_deref(), Some(word));
+                // Only Error stands out; Running and Stopped stay subdued.
+                assert_eq!(rows[3].emphasis, service == Service::Error, "{word}");
+                assert!(rows.iter().enumerate().all(|(i, r)| i == 3 || !r.emphasis));
+            }
+            v => panic!("{v:?}"),
+        }
+    }
+}
+
+fn open_web_interface(t: &mut T) {
+    t.open_network();
+    while selected_label(&t.view()) != "Web Interface" {
+        t.press(Btn::Down);
+    }
+    t.press(Btn::A);
+}
+
+#[test]
+fn the_web_interface_screen_shows_the_address_user_and_password() {
+    let mut t = with_syncthing();
+    open_web_interface(&mut t);
+    match t.view() {
+        NetView::Info {
+            main,
+            pairs,
+            legend,
+            notes,
+            ..
+        } => {
+            assert_eq!(main, "https://192.168.4.162:8384");
+            assert_eq!(
+                pairs,
+                [
+                    ("User", "slotadvance".to_string()),
+                    ("Password", "abacus zoom ablaze quarry dimple".to_string())
+                ]
+            );
+            assert!(legend.contains(&("Y", "Reset")));
+            assert_eq!(
+                notes,
+                [
+                    "Open it in a browser on a phone or computer on the same Wi-Fi.",
+                    "The browser warns about this handheld's self-signed certificate.",
+                    "That is expected here: accept it for this address only.",
+                ]
+            );
+        }
+        v => panic!("{v:?}"),
+    }
+    t.press(Btn::B);
+    assert_eq!(selected_label(&t.view()), "Web Interface");
+}
+
+#[test]
+fn a_changed_password_is_never_shown() {
+    let mut t = with_syncthing();
+    t.net.s().sync.as_mut().unwrap().password = Shown::Changed;
+    open_web_interface(&mut t);
+    match t.view() {
+        NetView::Info { pairs, .. } => {
+            assert_eq!(
+                pairs,
+                [("Login", "Changed in the web interface".to_string())]
+            );
+        }
+        v => panic!("{v:?}"),
+    }
+}
+
+#[test]
+fn without_an_address_it_says_not_connected() {
+    let mut t = with_syncthing();
+    t.net.s().status.link = Link::Connecting(None);
+    open_web_interface(&mut t);
+    match t.view() {
+        NetView::Info { main, notes, .. } => {
+            assert_eq!(main, "Not connected");
+            assert!(notes.is_empty());
+        }
+        v => panic!("{v:?}"),
+    }
+}
+
+#[test]
+fn reset_asks_first_and_is_offered_only_while_running() {
+    let mut t = with_syncthing();
+    open_web_interface(&mut t);
+    t.press(Btn::Y);
+    match t.view() {
+        NetView::Message { title, legend, .. } => {
+            assert!(title.contains("Reset"), "{title}");
+            assert_eq!(legend, [("B", "Keep"), ("A", "Reset")]);
+        }
+        v => panic!("{v:?}"),
+    }
+    t.press(Btn::B);
+    assert!(matches!(t.view(), NetView::Info { .. }));
+    assert!(!t.net.calls().contains(&"sync reset".to_string()));
+    t.press(Btn::Y);
+    t.press(Btn::A);
+    assert_eq!(t.net.calls().last().unwrap(), "sync reset");
+    assert!(matches!(t.view(), NetView::Info { .. }));
+    // Stopped: no Reset.
+    t.net.s().sync.as_mut().unwrap().service = Service::Stopped;
+    match t.view() {
+        NetView::Info { legend, main, .. } => {
+            assert_eq!(legend, [("B", "Back")]);
+            assert_eq!(main, "Syncthing is stopped");
+        }
+        v => panic!("{v:?}"),
+    }
+    t.press(Btn::Y);
+    assert!(matches!(t.view(), NetView::Info { .. }));
+}
+
+#[test]
+fn switching_wifi_off_also_stops_syncthing_and_greys_its_row() {
+    let mut t = with_syncthing();
+    t.open_network();
+    t.press(Btn::Left);
+    assert!(t.net.calls().contains(&"switch off".to_string()));
+    match t.view() {
+        NetView::Menu { rows, .. } => {
+            assert_eq!(rows.len(), 2);
+            assert!(rows[1].greyed);
+            assert_eq!(rows[1].value.as_deref(), Some("On"), "the setting is kept");
+        }
+        v => panic!("{v:?}"),
+    }
+}
+
+fn checks(t: &T) -> usize {
+    t.net.calls().iter().filter(|c| *c == "sync check").count()
+}
+
+impl T {
+    fn after_ms(&mut self, ms: u64) {
+        let now = self.app.now() + ms;
+        self.app.tick_ms(now);
+    }
+}
+
+#[test]
+fn the_credentials_are_checked_again_every_10_s_while_the_web_interface_is_open() {
+    let mut t = with_syncthing();
+    t.open_network();
+    // On the menu: never.
+    t.after_ms(1);
+    t.after_ms(30_000);
+    assert_eq!(checks(&t), 0);
+    let opened = |t: &T| t.net.calls().iter().filter(|c| *c == "sync menu").count();
+    let before = opened(&t);
+    while selected_label(&t.view()) != "Web Interface" {
+        t.press(Btn::Down);
+    }
+    t.press(Btn::A);
+    // Opening it asks once (as before); then every 10 s, not sooner.
+    assert_eq!(opened(&t), before + 1);
+    t.after_ms(1);
+    t.after_ms(9_900);
+    assert_eq!(checks(&t), 0);
+    t.after_ms(100);
+    assert_eq!(checks(&t), 1);
+    t.after_ms(5_000);
+    assert_eq!(checks(&t), 1);
+    t.after_ms(5_000);
+    assert_eq!(checks(&t), 2);
+    // Back to the menu: no more checks.
+    t.press(Btn::B);
+    assert!(matches!(t.view(), NetView::Menu { .. }));
+    t.after_ms(1);
+    t.after_ms(60_000);
+    assert_eq!(checks(&t), 2);
 }

@@ -613,6 +613,17 @@ impl Wifi {
         clock::offer_from(&r.stdout, Instant::now())
     }
 
+    /// The current connection's signal in dBm, from `wpa_cli signal_poll`: the driver's
+    /// own figure for the access point it is connected to. No scan, nothing transmitted.
+    /// `None` if it cannot say (not connected, an error, or a value out of range).
+    pub fn signal(&mut self, cancel: &Cancel) -> Option<i32> {
+        let r = self.cli(&["signal_poll"], CLI_LIMIT, cancel);
+        if !r.ok() {
+            return None;
+        }
+        parse_rssi(&r.stdout)
+    }
+
     pub fn has_saved(&self) -> bool {
         !self.saved.is_empty()
     }
@@ -620,6 +631,14 @@ impl Wifi {
     pub fn saved_names(&self) -> Vec<Vec<u8>> {
         self.saved.list().iter().map(|s| s.ssid.clone()).collect()
     }
+}
+
+/// `RSSI=` from `signal_poll`'s answer, if it is a plausible signal (−100 to −1 dBm).
+pub fn parse_rssi(text: &str) -> Option<i32> {
+    text.lines()
+        .find_map(|l| l.trim().strip_prefix("RSSI="))
+        .and_then(|v| v.trim().parse::<i32>().ok())
+        .filter(|d| (-100..=-1).contains(d))
 }
 
 /// The controller as it runs on the RG SP.
@@ -675,6 +694,8 @@ pub mod sim {
         pub ntp_output: String,
         pub in_range: Vec<Network>,
         pub stop_ignored: bool,
+        /// What `signal_poll` reports while connected (`None`: it fails).
+        pub rssi: Option<i32>,
     }
 
     #[derive(Clone)]
@@ -955,6 +976,16 @@ pub mod sim {
                             view.process(4242, false);
                             ok("OK\n")
                         }
+                        ["signal_poll"] => match (&s.connected, s.rssi) {
+                            (Some(_), Some(r)) => ok(&format!(
+                                "RSSI={r}\nLINKSPEED=72\nNOISE=9999\nFREQUENCY=2437\n"
+                            )),
+                            _ => Ran {
+                                code: Some(0),
+                                stdout: "FAIL\n".into(),
+                                ..Ran::default()
+                            },
+                        },
                         ["scan"] => ok("OK\n"),
                         ["scan_results"] => {
                             let mut out =

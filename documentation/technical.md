@@ -19,6 +19,7 @@ Everything here applies to the **Anbernic RG SP (2026)** (720 x 480 screen) runn
 - [USB and Wi-Fi](#usb-and-wi-fi)
 - [The 0.4.1 Wi-Fi card removal](#the-041-wi-fi-card-removal)
 - [Logging](#logging)
+- [Files copied from a computer: time stamps](#files-copied-from-a-computer-time-stamps)
 - [Design limitations](#design-limitations)
 - [Source map](#source-map)
 
@@ -218,6 +219,46 @@ Nothing here runs unless slot is already crashing, so sleep, wake and shutdown a
 
 ---
 
+## Files copied from a computer: time stamps
+
+*From 0.5.0 (R18, found in V2 validation, 26 October 2026; accepted as a documented limitation at checkpoint C). Full report: `design/v5-r18-findings.md` in the project files.*
+
+### What was observed
+
+- A file written onto the card by a Mac in Brisbane (UTC+10) at 06:46:46 UTC read on the RG SP as 20:46:46 UTC the previous day: exactly 10 hours early. Syncthing passed that time to the other device.
+- In the other direction, ten save states written by the RG SP between 14 and 16 October, before Syncthing was on the device, read on the Mac exactly 10 hours early too (36000 s, or 36001 s where the RG SP dropped an odd second).
+- The RG SP's clock was correct throughout (within 10 s of network time in every check), so the shift is in how time stamps are stored on the card, not in the clock or in Syncthing.
+
+### Probable cause
+
+- BaseOS mounts the games card with the vendor kernel's exFAT driver (`[EXFAT] trying to mount...` in the kernel log; mount options `rw,noatime,...` with no time zone option). This is Samsung's legacy exFAT driver. Its source converts time stamps using only the kernel's time zone and never reads or writes exFAT's per-time-stamp UTC offset field. BaseOS runs in UTC, so the driver treats every stored time as UTC. It also stores whole 2-second steps only.
+- macOS uses the UTC offset field when it writes, and reads entries without one as local time. The two sides therefore disagree by the computer's UTC offset, in both directions.
+- **Observed** behaviour is the shift itself, in both directions, and that files the RG SP writes read back unchanged on the RG SP. **Inferred, not measured:** the raw bytes macOS writes. For a Mac-written file to read 10 hours early through a driver that ignores the offset field, macOS must store the wall-clock fields 10 hours behind UTC with a matching offset byte. That is a valid exFAT encoding which offset-aware readers decode correctly. It was not inspected byte by byte, and nothing below depends on it.
+- The shift is the computer's UTC offset (changing with daylight saving where that applies), and other systems may shift the other way. slot.advance does not change BaseOS, so it does not change this behaviour.
+
+### What it affects
+
+| File | Time on the RG SP and its Syncthing peers |
+|---|---|
+| Written by the RG SP (in-game saves, states, resume) | Correct |
+| Arrived through Syncthing | Correct (set by Syncthing, read back unchanged) |
+| Copied onto the card by a computer | Shifted by the computer's UTC offset |
+
+slot.advance never chooses anything by file time. States are ordered by the stamp in their file names (`slot-store/src/ring.rs`), a game's save is always `Saves/<platform>/<name>.sav` (`slot/src/persist.rs`), and the label cache compares times only for equality. `.sync-conflict-` copies match none of those names, so they are never offered, loaded or removed. The generated Syncthing settings never set `maxConflicts`, so Syncthing's default keeps conflict copies. Tests lock these in: `slot-store/tests/ring.rs` (`the_switcher_ignores_file_times_and_sync_conflict_copies`), `slot/tests/r18_file_times.rs`, and `conflict_copies_are_never_switched_off` in `slot-net/src/sync/config.rs`.
+
+### Effect on Syncthing
+
+Checked off-device with two real Syncthing 2.1.6 instances using slot.advance's folder settings, with "computer-copied" files 10 hours early (8 of 8 scenarios as expected):
+
+- **Changes one after the other are not affected.** Syncthing orders changes by version history, not by time, so a change stamped 10 hours early still replaces a newer-stamped file, and the reverse; no conflict copies are made.
+- **The same file changed in two places before syncing** becomes a conflict. Syncthing keeps the version with the newer modified time under the normal name and the other as a `.sync-conflict-` copy. With the shift, the version that really was newer can end up as the conflict copy, so the game loads the other one by default. Both were kept on both devices in the test.
+- **Changed on one side, deleted on the other:** with the shift, the change survived as a conflict copy rather than under its normal name.
+- **The narrow collision.** Syncthing notices a change when a file's size or modified time differs from what it recorded. If a computer changes a save to exactly the same size and its shifted time lands in the same 2-second step Syncthing recorded for the previous version, the scan does not see the change. If another device then changes that save before the RG SP writes it again, that version replaces the unseen edit with no conflict copy. This is general Syncthing behaviour; the shift only moves the window to exactly the UTC offset after the previous RG SP write (for Brisbane, 10 hours plus or minus 1 second). One 2-second step apart, the change is seen and both versions are kept.
+
+Conflict copies are subject to Syncthing's `maxConflicts` setting; set to 0, Syncthing stops keeping them. No versioning is configured on the RG SP.
+
+---
+
 ## Design limitations
 
 - **Rapid lid flicks.** Rapidly flicking the lid closed and open can occasionally leave the screen dark with the lid open. In the case examined, the device woke and read the lid as shut, from both the driver and the raw sensor, most likely because the lid was still moving. It went back to sleep while the lid came to rest open, with no further lid movement to wake it. Closing and reopening the lid restores the game without losing progress. Normal wake behaviour is unaffected.
@@ -227,6 +268,7 @@ Nothing here runs unless slot is already crashing, so sleep, wake and shutdown a
 - **The battery cap is a plan**, based on the gauge and an assumed 100 mA, not a guarantee.
 - **The timer always ends with a shutdown**, even on the charger. The game is restored at the next power-on.
 - **Link play needs `wifi=on`**, which keeps the radio powered.
+- **File times from a computer** (0.5.0, with Syncthing): files copied onto the card by a computer read with a shifted modified time, because of the BaseOS exFAT driver. See [above](#files-copied-from-a-computer-time-stamps).
 
 ---
 

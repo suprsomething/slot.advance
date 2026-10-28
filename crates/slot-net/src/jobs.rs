@@ -32,6 +32,24 @@ pub const HANDOVER_LIMIT: Duration = Duration::from_secs(5);
 /// The bounded stop before power-off (Syncthing joins this in phase 2).
 pub const POWEROFF_LIMIT: Duration = Duration::from_secs(3);
 
+/// A signal reading older than this is treated as unknown (two missed 30 s polls and a
+/// margin; approved 25 Oct 2026).
+pub const SIGNAL_FRESH: Duration = Duration::from_secs(75);
+
+/// The current connection's signal, as the driver last reported it (`signal_poll`).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct Signal {
+    pub dbm: i32,
+    pub at: Instant,
+}
+
+impl Signal {
+    /// Taken recently enough to show (`SIGNAL_FRESH`).
+    pub fn fresh(&self, now: Instant) -> bool {
+        now.saturating_duration_since(self.at) < SIGNAL_FRESH
+    }
+}
+
 /// What the handheld shows about Wi-Fi.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Link {
@@ -83,6 +101,9 @@ pub struct Status {
     /// The network being joined from the handheld, while it is tried.
     pub joining: Option<Vec<u8>>,
     pub last_join: Option<(Vec<u8>, JoinOutcome)>,
+    /// The current connection's last signal reading. Forgotten whenever the link changes
+    /// (disconnect, another network, going quiet before sleep, SlotLink, Switch Off).
+    pub signal: Option<Signal>,
 }
 
 impl Default for Status {
@@ -94,6 +115,7 @@ impl Default for Status {
             scanning: false,
             joining: None,
             last_join: None,
+            signal: None,
         }
     }
 }
@@ -106,6 +128,8 @@ enum Job {
     Join(Vec<u8>, Key),
     Prefer(Vec<u8>),
     Forget(Vec<u8>),
+    /// Read the current connection's signal (no scan).
+    Signal,
     AskTime,
     HandOver(u64),
     TakeBack,
@@ -127,11 +151,21 @@ struct Shared {
     acks: Mutex<std::collections::HashSet<u64>>,
     acked: Condvar,
     next_ack: AtomicU64,
+    /// Told each time a connection is made (Syncthing's supervisor checks its health then).
+    on_connected: Mutex<Option<OnConnected>>,
+    /// A signal reading is queued: another is not added.
+    signal_queued: AtomicBool,
 }
+
+type OnConnected = Arc<dyn Fn() + Send + Sync>;
 
 impl Shared {
     fn set_link(&self, link: Link) {
         if let Ok(mut s) = self.status.lock() {
+            if s.link != link {
+                // A reading belongs to the connection it was taken on.
+                s.signal = None;
+            }
             s.link = link;
         }
     }
@@ -200,6 +234,8 @@ impl NetJobs {
             acks: Mutex::new(std::collections::HashSet::new()),
             acked: Condvar::new(),
             next_ack: AtomicU64::new(1),
+            on_connected: Mutex::new(None),
+            signal_queued: AtomicBool::new(false),
         });
         let worker = Worker {
             wifi,
@@ -209,6 +245,7 @@ impl NetJobs {
             started: false,
             token: Cancel::new(),
             stopping: false,
+            signal_failed: false,
         };
         let spawned = std::thread::Builder::new()
             .name("slot-net".into())
@@ -260,6 +297,14 @@ impl NetJobs {
             .lock()
             .map(|s| s.clone())
             .unwrap_or_default()
+    }
+
+    /// Asks for the current connection's signal, read in the background (the carousel asks
+    /// every 30 s while it is on screen). Returns at once; at most one is ever queued.
+    pub fn poll_signal(&self) {
+        if !self.shared.signal_queued.swap(true, Ordering::AcqRel) {
+            self.send(Job::Signal);
+        }
     }
 
     pub fn scan(&self) {
@@ -353,6 +398,13 @@ impl NetJobs {
         }
     }
 
+    /// Called (on the network thread, so it must not block) each time Wi-Fi connects.
+    pub fn set_on_connected(&self, f: impl Fn() + Send + Sync + 'static) {
+        if let Ok(mut h) = self.shared.on_connected.lock() {
+            *h = Some(Arc::new(f));
+        }
+    }
+
     pub fn clock_done(&self) -> bool {
         self.shared.clock_done.load(Ordering::SeqCst)
     }
@@ -406,6 +458,8 @@ struct Worker {
     token: Cancel,
     /// Power-off has begun: nothing may bring the link up again.
     stopping: bool,
+    /// The last signal poll gave nothing (logged once until one succeeds).
+    signal_failed: bool,
 }
 
 impl Worker {
@@ -471,6 +525,7 @@ impl Worker {
                     let _ = self.tx.send(Job::Wake);
                 }
             }
+            Job::Signal => self.signal(),
             _ if self.blocked() => {
                 // Asleep, switched off, stopping, or SlotLink has the radio: leave the link
                 // down. A join chosen on the handheld is reported as not done.
@@ -491,6 +546,49 @@ impl Worker {
             Job::Join(ssid, key) => self.join(ssid, Some(key)),
             Job::Prefer(ssid) => self.join(ssid, None),
             Job::AskTime => self.ask_time(),
+        }
+    }
+
+    /// One `signal_poll`, only while connected and not asleep, switched off or handed
+    /// over. Kept only if the link is still the one it was taken on.
+    fn signal(&mut self) {
+        self.shared.signal_queued.store(false, Ordering::Release);
+        let before = self.link();
+        if self.blocked() || !matches!(before, Link::Connected { .. }) {
+            return;
+        }
+        let token = self.token.clone();
+        let dbm = self.wifi.signal(&token);
+        let prev = {
+            let Ok(mut s) = self.shared.status.lock() else {
+                return;
+            };
+            if s.link != before || self.blocked() {
+                return;
+            }
+            let prev = s.signal.map(|x| x.dbm);
+            s.signal = dbm.map(|dbm| Signal {
+                dbm,
+                at: Instant::now(),
+            });
+            prev
+        };
+        // Logged when the level changes or the value moves by 3 dB or more, not every poll.
+        match dbm {
+            Some(d) => {
+                self.signal_failed = false;
+                let moved = prev.is_none_or(|p| {
+                    crate::scan::bars(p) != crate::scan::bars(d) || (p - d).abs() >= 3
+                });
+                if moved {
+                    eprintln!("slot: wifi: signal {d} dBm ({} of 3)", crate::scan::bars(d));
+                }
+            }
+            None if !self.signal_failed => {
+                self.signal_failed = true;
+                eprintln!("slot: wifi: signal not available (signal_poll gave no reading)");
+            }
+            None => {}
         }
     }
 
@@ -576,6 +674,12 @@ impl Worker {
         };
         let connected = matches!(link, Link::Connected { .. });
         self.shared.set_link(link);
+        if connected {
+            let hook = self.shared.on_connected.lock().ok().and_then(|h| h.clone());
+            if let Some(f) = hook {
+                f();
+            }
+        }
         if connected && !self.shared.clock_done.load(Ordering::SeqCst) {
             let need = self
                 .shared
@@ -1116,10 +1220,161 @@ mod tests {
     }
 
     #[test]
+    fn each_connection_is_announced_to_the_hook() {
+        let f = FakeSys::new();
+        let sim = Sim::new(&f);
+        sim.add_network("Home", Some("home pass"), -50);
+        let d = card();
+        let mut w = wifi(&f, &sim, d.path());
+        w.saved.remember(
+            b"Home",
+            crate::wifi::key_for(b"Home", Some("home pass")).unwrap(),
+        );
+        let jobs = NetJobs::spawn_with(w, no_step, no_rtc);
+        let seen = Arc::new(AtomicU32::new(0));
+        let s = seen.clone();
+        jobs.set_on_connected(move || {
+            s.fetch_add(1, Ordering::SeqCst);
+        });
+        wait_for("connected", || connected(&jobs));
+        wait_for("announced", || seen.load(Ordering::SeqCst) >= 1);
+        jobs.go_quiet();
+        wait_for("quiet", || jobs.is_quiet());
+        let before = seen.load(Ordering::SeqCst);
+        jobs.lid_opened();
+        wait_for("reconnected", || connected(&jobs));
+        wait_for("announced again", || seen.load(Ordering::SeqCst) > before);
+    }
+
+    #[test]
     fn power_off_is_bounded() {
         let r = rig(true, no_step);
         let began = Instant::now();
         r.jobs.before_poweroff();
         assert!(began.elapsed() < POWEROFF_LIMIT + Duration::from_millis(500));
+    }
+
+    // The carousel's signal reading (approved 25 Oct 2026).
+
+    fn polls(sim: &Sim) -> usize {
+        sim.log()
+            .iter()
+            .filter(|l| l.ends_with("signal_poll"))
+            .count()
+    }
+
+    fn reading(j: &NetJobs) -> Option<i32> {
+        j.status().signal.map(|s| s.dbm)
+    }
+
+    #[test]
+    fn a_signal_poll_reads_the_current_connection_without_scanning() {
+        let r = rig(true, no_step);
+        r.sim.state.lock().unwrap().rssi = Some(-58);
+        wait_for("connected", || connected(&r.jobs));
+        assert_eq!(reading(&r.jobs), None, "nothing until asked");
+        r.sim.clear_log();
+        r.jobs.poll_signal();
+        wait_for("reading", || reading(&r.jobs) == Some(-58));
+        let s = r.jobs.status().signal.unwrap();
+        assert!(s.fresh(Instant::now()));
+        assert!(!s.fresh(Instant::now() + SIGNAL_FRESH));
+        let log = r.sim.log();
+        assert_eq!(polls(&r.sim), 1, "{log:?}");
+        assert!(
+            log.iter().all(|l| !l.ends_with(" scan")),
+            "no scan: {log:?}"
+        );
+    }
+
+    #[test]
+    fn a_failed_poll_leaves_no_reading_rather_than_the_last_one() {
+        let r = rig(true, no_step);
+        r.sim.state.lock().unwrap().rssi = Some(-75);
+        wait_for("connected", || connected(&r.jobs));
+        r.jobs.poll_signal();
+        wait_for("reading", || reading(&r.jobs) == Some(-75));
+        r.sim.state.lock().unwrap().rssi = None;
+        let before = polls(&r.sim);
+        r.jobs.poll_signal();
+        wait_for("polled", || polls(&r.sim) > before);
+        wait_for("forgotten", || reading(&r.jobs).is_none());
+    }
+
+    #[test]
+    fn going_quiet_forgets_the_reading_and_nothing_polls_while_asleep() {
+        let r = rig(true, no_step);
+        r.sim.state.lock().unwrap().rssi = Some(-50);
+        wait_for("connected", || connected(&r.jobs));
+        r.jobs.poll_signal();
+        wait_for("reading", || reading(&r.jobs).is_some());
+        r.jobs.go_quiet();
+        wait_for("quiet", || r.jobs.is_quiet());
+        assert_eq!(reading(&r.jobs), None);
+        let before = polls(&r.sim);
+        r.jobs.poll_signal();
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(polls(&r.sim), before, "no poll while quiet");
+        // After the wake the old reading does not come back; a new poll is needed.
+        r.jobs.lid_opened();
+        wait_for("reconnected", || connected(&r.jobs));
+        assert_eq!(reading(&r.jobs), None);
+        r.jobs.poll_signal();
+        wait_for("new reading", || reading(&r.jobs) == Some(-50));
+    }
+
+    #[test]
+    fn slotlink_and_switch_off_forget_the_reading_and_stop_polls() {
+        let r = rig(true, no_step);
+        r.sim.state.lock().unwrap().rssi = Some(-50);
+        wait_for("connected", || connected(&r.jobs));
+        r.jobs.poll_signal();
+        wait_for("reading", || reading(&r.jobs).is_some());
+        assert!(r.jobs.hand_over());
+        assert_eq!(reading(&r.jobs), None);
+        let before = polls(&r.sim);
+        r.jobs.poll_signal();
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(
+            polls(&r.sim),
+            before,
+            "no poll while SlotLink has the radio"
+        );
+        r.jobs.take_back();
+        wait_for("reconnected", || connected(&r.jobs));
+        r.jobs.poll_signal();
+        wait_for("reading", || reading(&r.jobs).is_some());
+        r.jobs.switch_off();
+        wait_for("off", || r.jobs.status().link == Link::Off);
+        assert_eq!(reading(&r.jobs), None);
+        let before = polls(&r.sim);
+        r.jobs.poll_signal();
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(polls(&r.sim), before, "no poll when switched off");
+    }
+
+    #[test]
+    fn no_poll_runs_while_not_connected() {
+        let r = rig(false, no_step);
+        wait_for("no networks", || r.jobs.status().link == Link::NoNetworks);
+        r.jobs.poll_signal();
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(polls(&r.sim), 0);
+        assert_eq!(reading(&r.jobs), None);
+    }
+
+    #[test]
+    fn signal_poll_answers_are_parsed_strictly() {
+        use crate::wifi::parse_rssi;
+        assert_eq!(
+            parse_rssi("RSSI=-61\nLINKSPEED=72\nNOISE=9999\nFREQUENCY=2437\n"),
+            Some(-61)
+        );
+        assert_eq!(parse_rssi("FAIL\n"), None);
+        assert_eq!(parse_rssi(""), None);
+        assert_eq!(parse_rssi("RSSI=0\n"), None);
+        assert_eq!(parse_rssi("RSSI=-9999\n"), None);
+        assert_eq!(parse_rssi("RSSI=abc\n"), None);
+        assert_eq!(parse_rssi("LINKSPEED=72\nRSSI=-100\n"), Some(-100));
     }
 }

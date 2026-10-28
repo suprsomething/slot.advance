@@ -50,6 +50,8 @@ pub struct SlotState {
     pub sleep_minutes: u16,
     /// Wi-Fi left on for SlotLink. Off by default, with no menu: `wifi=on` in the file.
     pub wifi: bool,
+    /// Syncthing (0.5.0): runs while Wi-Fi is On and this is On. Off by default.
+    pub syncthing: bool,
     /// Game titles above the carts on the carousel.
     pub show_titles: bool,
 }
@@ -152,6 +154,7 @@ impl Default for SlotState {
             last_category: Category::All,
             sleep_minutes: SLEEP_MINUTES_DEFAULT,
             wifi: false,
+            syncthing: false,
             show_titles: false,
         }
     }
@@ -171,7 +174,7 @@ pub fn read_slot_state(root: &Path) -> SlotState {
 
 pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
     let text = format!(
-        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\nlast_category={}\nsleep_minutes={}\nwifi={}\nshow_titles={}\n",
+        "cart={}\ncart_platform={}\nbrightness={}\nblue_light={}\nvolume={}\nvolume_hp={}\nmuted={}\nmuted_hp={}\nclock_set={}\nutc_offset_min={}\nrumble={}\nff_speed={}\nff_sound={}\ncolour_correction={}\nshader_gba={}\nshader_gb={}\neject_save={}\nturbo={}\nrewind={}\ngb_palettes={}\ngb_palette={}\nlast_category={}\nsleep_minutes={}\nwifi={}\nsyncthing={}\nshow_titles={}\n",
         s.cart.as_deref().unwrap_or(""),
         s.cart_platform.map_or(String::new(), platform_key),
         s.brightness,
@@ -196,6 +199,7 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.last_category.name(),
         s.sleep_minutes,
         if s.wifi { "on" } else { "off" },
+        if s.syncthing { "on" } else { "off" },
         s.show_titles as u8
     );
     atomic_write(&state_path(root), text.as_bytes())
@@ -226,6 +230,7 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut last_category = None;
     let mut sleep_minutes = None;
     let mut wifi = None;
+    let mut syncthing = None;
     let mut show_titles = None;
     for line in text.lines().filter(|l| !l.is_empty()) {
         let Some((key, value)) = line.split_once('=') else {
@@ -261,6 +266,7 @@ fn parse(text: &str) -> Option<SlotState> {
                     .filter(|m| SLEEP_MINUTES.contains(m))
             }
             "wifi" => wifi = on_off(value),
+            "syncthing" => syncthing = on_off(value),
             "show_titles" => show_titles = flag(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             _ => {}
@@ -293,6 +299,7 @@ fn parse(text: &str) -> Option<SlotState> {
         last_category: last_category.unwrap_or(fallback.last_category),
         sleep_minutes: sleep_minutes.unwrap_or(fallback.sleep_minutes),
         wifi: wifi.unwrap_or(fallback.wifi),
+        syncthing: syncthing.unwrap_or(fallback.syncthing),
         show_titles: show_titles.unwrap_or(fallback.show_titles),
     })
 }

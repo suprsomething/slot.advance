@@ -8,6 +8,10 @@ license.workspace = true
 [dependencies]
 libc = { workspace = true }
 slot-store = { path = "../slot-store" }
+# Syncthing supervisor (0.5.0 phase 2): HTTPS to Syncthing's own web interface, trusting
+# only its certificate (P2-1), and checking its stored password hash (I9).
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+bcrypt = { version = "0.19", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

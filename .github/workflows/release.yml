@@ -62,6 +62,12 @@ jobs:
           file "$out/System/mgba_libretro.so" | grep -q aarch64
           file "$out/System/gpsp_libretro.so" | grep -q aarch64
           test -x "$out/System/slot"
+          file "$out/System/syncthing" | grep -q aarch64
+          test -x "$out/System/syncthing"
+          sh scripts/syncthing.sh check "$out/System/syncthing"
+          test -f "$out/System/licenses/syncthing-LICENSE.txt"
+          test -f "$out/System/licenses/syncthing.txt"
+          test -f "$out/System/licenses/eff-wordlist-CC-BY-3.0.txt"
           gpsp_src_sha="$(cat vendor/gpsp-src.sha)"
           test -f "$out/System/licenses/gpsp-${gpsp_src_sha}.tar.gz"
           test -f "$out/System/licenses/gpsp-${gpsp_src_sha}.meta"

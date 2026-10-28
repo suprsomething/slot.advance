@@ -387,6 +387,14 @@ pub struct App {
     /// The Network menu's screens while it is open.
     net_menu: Option<crate::net_menu::NetMenu>,
     net_face: Option<TexId>,
+    /// The carousel's Wi-Fi icon: its textures (in `WifiIcon::ALL` order), what it shows,
+    /// and the signal polling while the carousel is on screen (approved 25 Oct 2026).
+    wifi_faces: Option<[TexId; 5]>,
+    wifi_icon: Option<slot_ui::WifiIcon>,
+    wifi_looked: Option<Millis>,
+    signal_asked: Option<Millis>,
+    signal_for: Option<Vec<u8>>,
+    on_carousel: bool,
     /// The Wi-Fi setting this session started with. Switching it On takes effect after a
     /// restart (A2), so SlotLink keeps following this until then.
     wifi_at_boot: bool,
@@ -438,6 +446,12 @@ impl App {
             net_quiet_asked: 0,
             net_menu: None,
             net_face: None,
+            wifi_faces: None,
+            wifi_icon: None,
+            wifi_looked: None,
+            signal_asked: None,
+            signal_for: None,
+            on_carousel: false,
             wifi_at_boot: false,
             state_writer,
             phase: Phase::Shelf,
@@ -977,6 +991,51 @@ impl App {
 
     pub fn set_bolt_face(&mut self, bolt: TexId) {
         self.bolt = Some(bolt);
+    }
+
+    /// The Wi-Fi icon's textures, in `WifiIcon::ALL` order.
+    pub fn set_wifi_faces(&mut self, faces: [TexId; 5]) {
+        self.wifi_faces = Some(faces);
+    }
+
+    /// What the carousel's Wi-Fi icon shows now (`None`: no icon).
+    pub fn wifi_icon(&self) -> Option<slot_ui::WifiIcon> {
+        self.wifi_icon
+    }
+
+    /// While the carousel is on screen: look at the Wi-Fi state once a second, and ask for
+    /// a signal reading every 30 s, or at once on coming back to the carousel (after a game
+    /// or a wake) or on a new connection when there is no fresh reading. Asking only posts
+    /// to the Wi-Fi thread; nothing here waits. Nothing is asked anywhere else.
+    fn wifi_tick(&mut self) {
+        if !matches!(self.phase, Phase::Shelf) {
+            self.on_carousel = false;
+            self.signal_asked = None;
+            return;
+        }
+        let now = self.now();
+        let back = !std::mem::replace(&mut self.on_carousel, true);
+        if !back
+            && self
+                .wifi_looked
+                .is_some_and(|t| now.saturating_sub(t) < 1_000)
+        {
+            return;
+        }
+        self.wifi_looked = Some(now);
+        let view = crate::net::wifi_view(self.net.as_ref(), std::time::Instant::now());
+        self.wifi_icon = view.icon;
+        if view.connected != self.signal_for {
+            self.signal_for = view.connected.clone();
+            self.signal_asked = None;
+        }
+        let may_ask = self
+            .signal_asked
+            .is_none_or(|t| now.saturating_sub(t) >= crate::net::SIGNAL_POLL_MS);
+        if view.poll_due && may_ask {
+            self.net.poll_signal();
+            self.signal_asked = Some(now);
+        }
     }
 
     pub fn set_shelf_platform_face(&mut self, face: TexId, w: u32) {
@@ -1739,7 +1798,12 @@ impl App {
             };
             return;
         };
-        match menu.input(action, self.net.as_mut(), self.state.wifi) {
+        match menu.input(
+            action,
+            self.net.as_mut(),
+            self.state.wifi,
+            self.state.syncthing,
+        ) {
             Effect::None => {}
             Effect::Close => {
                 self.net_menu = None;
@@ -1759,6 +1823,11 @@ impl App {
                 }
                 self.persist();
             }
+            Effect::SetSync(on) => {
+                eprintln!("slot: sync: set {}", if on { "on" } else { "off" });
+                self.state.syncthing = on;
+                self.persist();
+            }
             Effect::Restart => {
                 self.net_menu = None;
                 self.restarting = true;
@@ -1771,7 +1840,9 @@ impl App {
     /// What the Network screen shows, while it is open.
     pub fn net_view(&self) -> Option<slot_ui::NetView> {
         match (&self.phase, &self.net_menu) {
-            (Phase::Network, Some(m)) => Some(m.view(self.net.as_ref(), self.state.wifi)),
+            (Phase::Network, Some(m)) => {
+                Some(m.view(self.net.as_ref(), self.state.wifi, self.state.syncthing))
+            }
             _ => None,
         }
     }
@@ -1813,6 +1884,7 @@ impl App {
             QuickRow::About => self.phase = Phase::About,
             QuickRow::Network => {
                 self.net_menu = Some(crate::net_menu::NetMenu::new());
+                self.net.sync_menu_opened();
                 self.phase = Phase::Network;
             }
             QuickRow::Screen | QuickRow::Game => {
@@ -2309,8 +2381,9 @@ impl App {
             self.net.idle_moment();
         }
         if let Some(m) = &mut self.net_menu {
-            m.tick(self.net.as_ref());
+            m.tick(self.net.as_ref(), self.clock as u64);
         }
+        self.wifi_tick();
         let offer = self.undo_label();
         if let Some(p) = &mut self.polaroids {
             p.set_undo(offer);
@@ -2592,6 +2665,11 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                let face = self
+                    .wifi_icon
+                    .zip(self.wifi_faces)
+                    .map(|(i, f)| f[i.index()]);
+                slot_ui::draw_wifi_icon(self.shelf_clock, face, out);
             }
             Phase::About => {
                 draw_about(self.about_face, out);
