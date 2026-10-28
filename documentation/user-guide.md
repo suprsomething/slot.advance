@@ -15,13 +15,14 @@ New to slot.advance? Start with the [README](../README.md), which covers what it
 5. [Settings](#settings)
 6. [Game titles](#game-titles)
 7. [Wi-Fi and link play](#wi-fi-and-link-play)
-8. [Battery](#battery)
-9. [Files on the games card](#files-on-the-games-card)
-10. [Going back](#going-back)
-11. [Troubleshooting](#troubleshooting)
-12. [Known limitations](#known-limitations)
-13. [Reporting a problem](#reporting-a-problem)
-14. [Differences from slot](#differences-from-slot)
+8. [Syncthing: file times and conflict copies](#syncthing-file-times-and-conflict-copies)
+9. [Battery](#battery)
+10. [Files on the games card](#files-on-the-games-card)
+11. [Going back](#going-back)
+12. [Troubleshooting](#troubleshooting)
+13. [Known limitations](#known-limitations)
+14. [Reporting a problem](#reporting-a-problem)
+15. [Differences from slot](#differences-from-slot)
 
 ---
 
@@ -218,6 +219,24 @@ With it on, the radio stays powered, wakes from sleep don't get the Wi-Fi-off sp
 
 ---
 
+## Syncthing: file times and conflict copies
+
+*From 0.5.0, for players who sync Saves and States with Syncthing.*
+
+**Files copied onto the games card from a computer can show a shifted modified time** on the RG SP, and therefore on your other synced devices. The shift is the computer's difference from UTC (10 hours in Brisbane, for example), and the direction can vary between computers and time zones. Files the RG SP writes itself (in-game saves, states) and files that arrive through Syncthing keep correct times. On a Mac, files written by the RG SP can likewise show a shifted time.
+
+What this means for syncing:
+
+- **Normal syncing works.** When a save changes on one device and then syncs before it changes anywhere else, the newer save reaches every device, whatever the file times say. Syncthing follows the order of changes, not the times.
+- **If the same save was changed in two places before they synced,** Syncthing keeps one version under the normal name and normally keeps the other beside it as a conflict copy, for example `Pokemon Emerald.sync-conflict-20261026-164646-ABCDEFG.sav`. Syncthing chooses by modified time, so a shifted time can decide which version the game loads by default.
+- **If a save seems unexpectedly older,** look for conflict copies next to it. To use one, close the game, keep a copy of the current save somewhere safe, then rename the conflict copy to the save's normal name. slot.advance never loads or deletes conflict copies by itself.
+- **Conflict copies are limited by Syncthing's settings.** Leave **Max Conflicts** in the folder's settings at its default; never set it to 0, which stops Syncthing keeping them.
+- **Avoid changing the same save in two places** before the devices have synced, and avoid copying saves onto the card with a computer while that game is also being played on another synced device.
+
+This is a known limitation, not a guarantee that every possible edit is kept: in one narrow case (an edited save with exactly the same size and the same time stamp as before) a change made with a computer can go unnoticed. The cause, the evidence and that case are described in the [Technical reference](technical.md#files-copied-from-a-computer-time-stamps).
+
+---
+
 ## Battery
 
 | Battery | What happens |
@@ -297,6 +316,7 @@ As when upgrading, only the contents of `System` need copying. On a Mac, don't d
 - **Battery figures come from the battery gauge**, which reads in whole 1% steps. The results are based on a small number of individual runs. See [Methodology and uncertainty](sleep-and-battery.md#methodology-and-uncertainty).
 - **Link play needs `wifi=on`**. With it on, the radio stays powered.
 - **The sleep timer always ends with a shutdown**, even on the charger. The game is restored at the next power-on.
+- **Files copied onto the card from a computer can show shifted modified times** (0.5.0, with Syncthing). Normal syncing works, but when a save was changed in two places before syncing, the shift can decide which version keeps the normal name. [Details](#syncthing-file-times-and-conflict-copies).
 
 ---
 
