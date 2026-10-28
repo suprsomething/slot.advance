@@ -59,16 +59,16 @@ impl App {
     }
 
     /// Rows a game leaves out: Date & Time (never set with a game seated), Exit Game with
-    /// one cart (eject is refused then), and the rows of the other platform (approved Q1).
+    /// one cart (eject is refused then), the other platform's shader (approved Q1), and GB
+    /// Palettes, which only takes effect when a game next starts, so showing it in a game
+    /// would mislead (approved 28 Oct 2026; the carousel keeps it).
     pub fn in_game_hidden(&self) -> Vec<QuickRow> {
-        let mut hidden = vec![QuickRow::DateTime];
+        let mut hidden = vec![QuickRow::DateTime, QuickRow::GbPalettes];
         if self.single_cart() {
             hidden.push(QuickRow::ExitGame);
         }
         match self.seated_cart().map(|c| c.platform) {
-            Some(Platform::Gba) | None => {
-                hidden.extend([QuickRow::GbShader, QuickRow::GbPalettes]);
-            }
+            Some(Platform::Gba) | None => hidden.push(QuickRow::GbShader),
             Some(Platform::Gb | Platform::Gbc) => hidden.push(QuickRow::GbaShader),
         }
         hidden

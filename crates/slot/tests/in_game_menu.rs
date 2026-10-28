@@ -264,9 +264,39 @@ fn a_game_boy_game_leaves_out_the_gba_shader() {
         [
             QuickRow::GbShader,
             QuickRow::ColourCorrection,
-            QuickRow::GbPalettes,
             QuickRow::Titles
         ]
+    );
+}
+
+#[test]
+fn gb_palettes_is_never_offered_in_a_game_but_stays_on_the_carousel() {
+    let gba = tmp_root_with_carts(&["Emerald", "Fusion"]);
+    let gb = common::tmp_root_with_gb_carts(&["Tetris", "Zelda"]);
+    for (d, stem) in [(&gba, "Emerald"), (&gb, "Tetris")] {
+        let mut a = app_playing_with(d.path(), stem, StubSnapshot::boxed());
+        assert!(
+            a.in_game_hidden().contains(&QuickRow::GbPalettes),
+            "{stem}: GB Palettes offered in a game"
+        );
+        screen_page(&mut a);
+        assert!(
+            !page_rows(&mut a).contains(&QuickRow::GbPalettes),
+            "{stem}: GB Palettes reached on the Screen page"
+        );
+    }
+    let carousel = common::tmp_root_with_gb_carts(&["Tetris", "Zelda"]);
+    let mut a = common::boot(carousel.path());
+    a.apply(Action::QuickMenu);
+    press(&mut a, Btn::A);
+    let mut seen = vec![];
+    for _ in 0..QuickRow::SCREEN.len() {
+        seen.push(a.quick_menu().expect("a row"));
+        press(&mut a, Btn::Down);
+    }
+    assert!(
+        seen.contains(&QuickRow::GbPalettes),
+        "GB Palettes left the carousel Settings"
     );
 }
 
