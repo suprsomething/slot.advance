@@ -121,7 +121,7 @@ fn the_menu_is_drawn_only_after_the_reveal_delay() {
 }
 
 #[test]
-fn moving_inside_the_menu_draws_it_at_once() {
+fn moving_inside_the_menu_after_the_reveal_keeps_it_drawn() {
     let (_d, mut a) = playing();
     a.apply(Action::QuickMenu);
     settle(&mut a, MENU_REVEAL_MS + 20);
@@ -801,6 +801,35 @@ fn network_opens_over_the_game_and_b_comes_back_to_settings() {
 }
 
 #[test]
+fn holding_menu_on_the_network_screen_ejects_and_closes_it() {
+    let (_d, mut a) = playing();
+    let _net = with_net(&mut a);
+    open_network(&mut a);
+    assert!(a.net_menu_open());
+    a.apply(Action::Eject);
+    assert!(matches!(a.phase(), Phase::Ejecting { .. }));
+    assert!(
+        !a.net_menu_open(),
+        "the Network screens stayed behind the eject"
+    );
+}
+
+#[test]
+fn the_carousel_network_menu_is_not_closed_by_the_in_game_tidy() {
+    let d = tmp_root_with_carts(&["Emerald", "Fusion"]);
+    let mut a = common::boot(d.path());
+    let _net = with_net(&mut a);
+    a.apply(Action::QuickMenu);
+    while a.quick_menu() != Some(QuickRow::Network) {
+        press(&mut a, Btn::Down);
+    }
+    press(&mut a, Btn::A);
+    settle(&mut a, 500);
+    assert!(a.net_menu_open());
+    assert!(a.net_view().is_some());
+}
+
+#[test]
 fn no_clock_correction_is_offered_while_the_menu_is_open() {
     let (_d, mut a) = playing();
     let net = with_net(&mut a);
@@ -969,7 +998,9 @@ fn a_tap_of_menu_is_refused_during_a_link_and_select_menu_still_opens_its_screen
 }
 
 #[test]
-fn a_link_a_peer_starts_closes_the_menu() {
+/// Defensive: a link is only started from the SlotLink screen, which cannot open over the
+/// in-game menu, but a link start must never leave the menu holding its game.
+fn a_link_start_closes_the_menu() {
     let (_d, mut a) = playing_with_wifi();
     open(&mut a);
     a.start_link(starter(|_, _| Err(io::Error::other("test"))), 0);

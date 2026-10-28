@@ -278,7 +278,9 @@ impl App {
             self.phase,
             Phase::Playing { .. } | Phase::Doze { cart: Some(_) } | Phase::Polaroids { .. }
         ) {
-            self.in_game = None;
+            if self.in_game.take() == Some(InGame::Network) {
+                self.net_menu = None;
+            }
             self.states_from_menu = false;
             self.menu_tap = None;
         }

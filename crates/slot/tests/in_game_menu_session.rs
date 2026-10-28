@@ -207,6 +207,26 @@ fn a_latched_fast_forward_stops_when_the_menu_opens() {
 }
 
 #[test]
+fn a_fast_forward_latched_behind_the_menu_is_dropped_when_it_closes() {
+    let (mut s, _d, mut now) = session_playing();
+    open_menu(&mut s, &mut now);
+    tap(&mut s, &mut now, Btn::R2);
+    tap(&mut s, &mut now, Btn::R2);
+    assert!(stays_at(&mut s, &mut now, Speed::Paused, 100));
+    tap(&mut s, &mut now, Btn::B);
+    assert!(runs_at(&mut s, &mut now, Speed::Normal));
+    assert!(stays_at(&mut s, &mut now, Speed::Normal, 150));
+    wait(&mut s, &mut now, 400);
+    // The first R2 after the menu fast-forwards, rather than being used up as an unlatch.
+    step(&mut s, &mut now, &[RawEvent::Down(Btn::R2)]);
+    assert!(
+        runs_at(&mut s, &mut now, Speed::Fast),
+        "the first R2 after the menu did nothing"
+    );
+    step(&mut s, &mut now, &[RawEvent::Up(Btn::R2)]);
+}
+
+#[test]
 fn a_double_tap_of_menu_still_goes_straight_to_states() {
     let (mut s, _d, mut now) = session_playing();
     s.app_mut().apply(slot_input::Action::SaveState);

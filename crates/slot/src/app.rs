@@ -1892,6 +1892,11 @@ impl App {
         }
     }
 
+    /// The Network menu's screens are held (open, or waiting under a lid close).
+    pub fn net_menu_open(&self) -> bool {
+        self.net_menu.is_some()
+    }
+
     /// About is on screen, on the carousel or in a game.
     pub fn about_open(&self) -> bool {
         matches!(self.phase, Phase::About) || self.in_game() == Some(InGame::About)
@@ -3227,6 +3232,8 @@ impl App {
         };
         self.in_game = None;
         self.menu_tap = None;
+        // An in-game Network screen goes with its game (anything typed is wiped).
+        self.net_menu = None;
         self.end_link();
         self.close_game_menu();
         self.flush_eject(&cart);
@@ -3733,7 +3740,9 @@ impl App {
             old.starter.cancel();
         }
         // A link (here, one a peer started) runs the game; no menu may hold it.
-        self.in_game = None;
+        if self.in_game.take() == Some(InGame::Network) {
+            self.net_menu = None;
+        }
         self.menu_tap = None;
         self.game_menu = Some(GameMenu::Working {
             role: LinkRow::from_client_id(client_id),

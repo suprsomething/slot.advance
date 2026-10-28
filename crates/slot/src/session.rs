@@ -154,8 +154,9 @@ impl Session {
             let menu_was_open = self.app.in_game_open();
             self.act(action);
             // A latched fast forward stops when the in-game menu opens, so it does not
-            // carry on by itself when the game resumes (upstream slot f63b009).
-            if !menu_was_open && self.app.in_game_open() && self.gestures.ff_latched() {
+            // carry on by itself when the game resumes (upstream slot f63b009), and one
+            // latched behind the menu (where it cannot start) is dropped when it closes.
+            if menu_was_open != self.app.in_game_open() && self.gestures.ff_latched() {
                 for stop in self.gestures.drop_ff_latch() {
                     self.act(stop);
                 }
