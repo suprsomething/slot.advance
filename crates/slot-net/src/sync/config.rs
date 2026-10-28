@@ -499,6 +499,31 @@ mod tests {
         assert!(s.hash.starts_with("$2a$10$"));
     }
 
+    /// R18 (checkpoint C): when the same save changes in two places, Syncthing keeps the
+    /// other version as a `.sync-conflict-` copy, choosing which by file time, and file
+    /// times from a computer can be shifted by its UTC offset. Those copies are what lets a
+    /// player recover the other version, so slot.advance must never set `maxConflicts`
+    /// (Syncthing's default keeps them) and the security floor must never add it.
+    #[test]
+    fn conflict_copies_are_never_switched_off() {
+        let x = first_settings(GENERATED, &layout()).unwrap();
+        assert!(
+            !x.contains("maxConflicts"),
+            "generated folders set maxConflicts"
+        );
+        let weak = x
+            .replace(
+                "<address>0.0.0.0:8384</address>",
+                "<address>127.0.0.1:8384</address>",
+            )
+            .replace("tls=\"true\"", "tls=\"false\"");
+        let fixed = with_floor(&weak).expect("the floor repairs the weakened settings");
+        assert!(
+            !fixed.contains("maxConflicts"),
+            "the floor added maxConflicts"
+        );
+    }
+
     #[test]
     fn the_floor_repairs_only_what_is_wrong() {
         let good = first_settings(GENERATED, &layout()).unwrap();

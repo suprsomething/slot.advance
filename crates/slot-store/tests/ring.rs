@@ -343,3 +343,61 @@ fn moving_aside_never_overwrites_what_is_already_there() {
         vec![0u8; 8]
     );
 }
+
+/// R18 (checkpoint C): files copied onto the card by a computer can carry a time stamp
+/// shifted by the computer's UTC offset, and Syncthing can leave `.sync-conflict-` copies
+/// beside a state. The switcher must order states by the stamp in their names, never by
+/// file time, and must never offer a conflict copy (or confuse one with `resume.state`).
+#[test]
+fn the_switcher_ignores_file_times_and_sync_conflict_copies() {
+    use std::time::{Duration, UNIX_EPOCH};
+    let d = tempdir().unwrap();
+    let r = StateRing::new(d.path(), Platform::Gba, Core::Mgba, "Emerald");
+    let stamps = [
+        "2026-10-26_16-46-01",
+        "2026-10-26_16-46-02",
+        "2026-10-26_16-46-03",
+    ];
+    for (i, s) in stamps.iter().enumerate() {
+        r.push(&[i as u8; 16], b"png", s).unwrap();
+    }
+    r.write_resume(b"the real resume").unwrap();
+    let dir = d.path().join("States/GBA/mgba/Emerald");
+    // File times in the opposite order to the names, one 10 h in the past (the R18 shift).
+    for (i, s) in stamps.iter().enumerate() {
+        let t = UNIX_EPOCH + Duration::from_secs(1_793_000_000 - 36_000 * i as u64);
+        std::fs::File::options()
+            .write(true)
+            .open(dir.join(format!("{s}.state")))
+            .unwrap()
+            .set_modified(t)
+            .unwrap();
+    }
+    for name in [
+        "2026-10-26_16-46-03.sync-conflict-20261026-064646-ABCDEFG.state",
+        "2026-10-26_16-46-09.sync-conflict-20261026-064646-ABCDEFG.state",
+        "resume.sync-conflict-20261026-064646-ABCDEFG.state",
+    ] {
+        std::fs::write(dir.join(name), b"conflict copy").unwrap();
+    }
+    let l = r.list().unwrap();
+    let names: Vec<&str> = l.iter().map(|e| e.stamp.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "2026-10-26_16-46-03",
+            "2026-10-26_16-46-02",
+            "2026-10-26_16-46-01"
+        ]
+    );
+    assert_eq!(r.read_resume().unwrap().unwrap(), b"the real resume");
+    for name in [
+        "2026-10-26_16-46-03.sync-conflict-20261026-064646-ABCDEFG.state",
+        "resume.sync-conflict-20261026-064646-ABCDEFG.state",
+    ] {
+        assert!(
+            dir.join(name).exists(),
+            "a conflict copy was removed: {name}"
+        );
+    }
+}
