@@ -204,3 +204,54 @@ fn a_resume_that_fails_to_read_is_not_trusted_and_is_not_filed_away() {
         "the unreadable resume was moved or disturbed"
     );
 }
+
+/// Every mGBA state carries the save inside it, so a resume of a game that started without
+/// its real save would bring the blank save back on the next boot. A failed read of either
+/// file protects both.
+#[test]
+fn a_save_that_fails_to_read_lets_no_resume_be_written_either() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let root = d.path();
+    let sav = root.join("Saves/GBA/Emerald.sav");
+    std::fs::create_dir_all(&sav).unwrap();
+    std::fs::write(sav.join("keep"), b"x").unwrap();
+
+    let mut s = seat_emerald(root);
+    assert!(
+        !s.emu().expect("no core").snapshot().resume_trusted(),
+        "a resume of the blank game could be written and carry the blank save back later"
+    );
+    s.app_mut().tick_ms(60_000);
+    s.app_mut().settle_saves();
+    assert_eq!(
+        persist::read_resume(root, Platform::Gba, Core::Mgba, "Emerald").unwrap(),
+        None,
+        "a resume of the game started without its save was written"
+    );
+}
+
+#[test]
+fn a_resume_that_fails_to_read_lets_no_battery_save_be_written_either() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let root = d.path();
+    let resume = root.join("States/GBA/mgba/Emerald/resume.state");
+    std::fs::create_dir_all(&resume).unwrap();
+    std::fs::write(resume.join("keep"), b"x").unwrap();
+    let sav = root.join("Saves/GBA/Emerald.sav");
+    std::fs::create_dir_all(sav.parent().unwrap()).unwrap();
+    let real = vec![0x5Au8; 8 * 1024]; // the size the stand-in core takes
+    std::fs::write(&sav, &real).unwrap();
+
+    let mut s = seat_emerald(root);
+    assert!(
+        !s.emu().expect("no core").snapshot().save_ram_trusted(),
+        "saves written now would be rolled back by the older save inside the resume once it reads again"
+    );
+    s.app_mut().tick_ms(60_000);
+    s.app_mut().settle_saves();
+    assert_eq!(
+        std::fs::read(&sav).unwrap(),
+        real,
+        "the save changed while the resume that carries a copy of it could not be read"
+    );
+}

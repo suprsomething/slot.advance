@@ -1273,8 +1273,8 @@ impl App {
         self.platform = platform;
     }
 
-    /// The card failed to read this game's resume, so it is not the core's to refuse and is
-    /// left where it is rather than filed away.
+    /// The card failed to read this game's save or resume, so the resume is not the core's to
+    /// refuse and is left where it is rather than filed away.
     pub fn set_resume_unread(&mut self, unread: bool) {
         self.resume_unread = unread;
     }

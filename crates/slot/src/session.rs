@@ -472,14 +472,16 @@ impl Session {
             None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
         };
         // A file the card failed to read is still the player's: the game starts without it, and
-        // nothing is written over it until the cart goes in again.
-        if sav_unread {
+        // nothing is written over it until the cart goes in again. The save and the resume go
+        // together, because every mGBA state carries the save inside it: a resume written now
+        // would bring a blank save back over the real one, and saves written while the resume
+        // is unread would be rolled back by the older copy inside it once it reads again.
+        let unread = sav_unread || resume_unread;
+        if unread {
             emu.refuse_save_ram();
-        }
-        if resume_unread {
             emu.refuse_resume();
         }
-        self.app.set_resume_unread(resume_unread);
+        self.app.set_resume_unread(unread);
         emu.set_volume(self.app.output_volume());
         emu.set_driven(self.driven);
         self.app.set_snapshot(Box::new(emu.snapshot()));
