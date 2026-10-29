@@ -199,3 +199,74 @@ fn on_mgba_a_state_load_keeps_a_128k_flash_game_on_the_bank_it_was_on() {
         reloaded[0x10000]
     );
 }
+
+/// A tiny Game Boy program on an MBC2 cartridge (type 0x06, MBC2 with
+/// battery): it enables the cart's built-in RAM, reads it, writes 5 to its
+/// first cell and stops.
+fn mbc2_rom() -> Vec<u8> {
+    const CODE: [u8; 13] = [
+        0x3e, 0x0a, // ld a, 0x0A
+        0xea, 0x00, 0x00, // ld (0x0000), a       enable cart RAM
+        0xfa, 0x00, 0xa0, // ld a, (0xA000)       first read of save RAM
+        0x3e, 0x05, // ld a, 5
+        0xea, 0x00, 0xa0, // ld (0xA000), a       write 5
+    ];
+    let mut rom = vec![0u8; 0x8000];
+    rom[0x100..0x104].copy_from_slice(&[0x00, 0xc3, 0x50, 0x01]); // nop; jp 0x0150
+    rom[0x104..0x108].copy_from_slice(&[0xce, 0xed, 0x66, 0x66]); // start of the header logo
+    rom[0x134..0x13d].copy_from_slice(b"MBC2 TEST");
+    rom[0x147] = 0x06;
+    rom[0x150..0x150 + CODE.len()].copy_from_slice(&CODE);
+    rom[0x150 + CODE.len()..0x150 + CODE.len() + 2].copy_from_slice(&[0x18, 0xfe]); // jr -2
+    rom[0x14d] = rom[0x134..0x14d]
+        .iter()
+        .fold(0u8, |a, b| a.wrapping_sub(*b).wrapping_sub(1));
+    rom
+}
+
+const MBC2_CHILD: &str = "SLOT_TEST_MBC2_CHILD";
+
+#[test]
+fn on_mgba_an_mbc2_game_reading_its_save_ram_neither_crashes_nor_loses_the_write() {
+    let Some(dylib) = common::vendored_core() else {
+        eprintln!("no vendored mGBA core, skipping");
+        return;
+    };
+    if std::env::var_os(MBC2_CHILD).is_some() {
+        let rom = Path::new(env!("CARGO_TARGET_TMPDIR")).join("mbc2.gb");
+        std::fs::write(&rom, mbc2_rom()).expect("write rom");
+        let mut core =
+            LibretroCore::open(&dylib).expect("vendored core is present but would not open");
+        apply_core_options(&mut core, Core::Mgba, "auto", false, false, None);
+        core.load(&rom).expect("mGBA refused the rom");
+        for _ in 0..60 {
+            core.run_frame(ButtonMask::default());
+            let _ = core.take_audio();
+        }
+        let save = core.save_ram().expect("mGBA gave no save");
+        assert_eq!(
+            save.first().map(|b| b & 0x0f),
+            Some(5),
+            "the game's write to its MBC2 RAM never reached the save"
+        );
+        return;
+    }
+    // The defect is a crash inside the core, which would take the whole test
+    // binary down, so the core runs in a child copy of this test.
+    let out = std::process::Command::new(std::env::current_exe().expect("test binary"))
+        .args([
+            "on_mgba_an_mbc2_game_reading_its_save_ram_neither_crashes_nor_loses_the_write",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(MBC2_CHILD, "1")
+        .output()
+        .expect("could not run the child test");
+    assert!(
+        out.status.success(),
+        "the MBC2 game took the core down or lost its write ({}):\n{}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
