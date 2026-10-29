@@ -388,7 +388,7 @@ Each game's shader, colour correction, fast-forward speed and fast-forward sound
 |---|---|---|---|
 | M1 | A GBA game with a 128 KB flash save (two 64 KB banks) was put back on bank 0 by every state load, so its next save could land in the wrong half of the chip | `cores/mgba/flash-bank-survives-mask.patch`: the flash bank survives a state load | upstream slot b0fe199 |
 | D2 | A Game Boy game on an MBC2 cartridge crashed mGBA on its first save-RAM read | `cores/mgba/543a19758-mbc2-sram-bank.patch`, mGBA's own fix, unchanged | mGBA 543a197, as upstream slot 1b2001e |
-| M2 | An empty (zero-byte) `resume.state` or save state crashed slot, at every boot with that cart seated | `LibretroCore::unserialize` refuses empty data; the resume is then treated as refused and never overwritten | upstream slot 4e74bdd |
+| M2 | An empty (zero-byte) `resume.state` or save state crashed slot, at every boot with that cart seated | `LibretroCore::unserialize` refuses empty data; the resume is then treated as refused, like any state the core rejects (below) | upstream slot 4e74bdd |
 | M3 | A save or resume the card **failed to read** was treated as missing, so the game started blank and the next save overwrote the real file | A failed read is an error, never "no file": see below | from upstream slot c5de4cc |
 | M4 | A SlotLink joiner on mGBA, which runs the host's machine, saved the host's game and save over its own | Once the host's state is restored, the joiner's save RAM and resume are refused: see below | from upstream slot c5de4cc |
 
@@ -401,6 +401,8 @@ Each game's shader, colour correction, fast-forward speed and fast-forward sound
 - `App::card_unread` is set, which raises the existing card alarm (below).
 
 Both files are protected together because every mGBA state carries the save RAM inside it: a resume written over a blank game would bring a blank save back over the real one, and saves written while the resume is unread would be rolled back by the older copy inside it once it read again. The protection, and the alarm, last until the cart goes back to the shelf; the next insert reads both files afresh. A restart has the same effect. The log line is `slot: save read: …; leaving it alone until the cart goes in again` (or `resume read`).
+
+**A resume the core refuses** (an empty one after M2, or one the emulator rejects) is handled as before 0.5.0: it is moved aside as `resume-refused-<time>.state` (`retire_refused_resume`), the game starts fresh, and that session's resume is not written and manual states are refused until the cart is inserted again. No band shows, because the card read correctly.
 
 **Trade-off (accepted):** a session played while either file can't be read is not saved at all. Because nothing is written, the lid-close flush reports success, so the [timed shutdown](#the-timed-shutdown-and-restore) can still switch the RG SP off and that session's progress is lost. The real files are never touched.
 

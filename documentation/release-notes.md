@@ -35,7 +35,7 @@ Optional Wi-Fi, Syncthing for Saves and States, an in-game menu, and fixes that 
 
 **Save safety** (found by a final check of upstream slot's fixes, and fixed from them; see [Save safety](technical.md#save-safety))
 - **Games with a 128 KB flash save could save into the wrong half of the chip after a state was loaded**, the Pokémon Ruby, Sapphire, Emerald, FireRed and LeafGreen games among them. The flash bank now survives a state load. From upstream slot.
-- **An empty suspend slot or save state crashed slot.advance**, at every start with that game seated. It is now ignored and left alone. From upstream slot.
+- **An empty suspend slot or save state crashed slot.advance**, at every start with that game seated. It is now refused rather than loaded: the game starts fresh, the empty suspend slot is moved aside as `resume-refused-<time>.state`, and, as before for any suspend slot the emulator refuses, the suspend slot isn't written and save states are refused until the cart is inserted again (the game's own saves still work). From upstream slot.
 - **A save the card failed to read was treated as missing**, so the game started blank and its next save replaced the real one. Now the game starts without it, the red "Can't write to SD card" band shows, and neither the save nor the suspend slot is written until the cart is inserted again. From upstream slot, extended to protect both files.
 - **After link play, the joining handheld saved the host's game over its own.** Its own save and suspend slot are now left alone until the cart is inserted again (see Known limitations). From upstream slot.
 - **Game Boy games on an MBC2 cartridge, such as Kirby's Pinball Land, crashed** on their first save. mGBA's own fix, as in upstream slot.

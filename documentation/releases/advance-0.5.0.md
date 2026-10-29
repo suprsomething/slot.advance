@@ -19,7 +19,7 @@ With Wi-Fi off, nothing changes: about 2 to 3.2% an hour asleep in our extended 
 ### Save safety
 Fixes from upstream slot and mGBA, found in a final check before this release:
 - Games with a **128 KB flash save**, the Pokémon Ruby, Sapphire, Emerald, FireRed and LeafGreen games among them, could save into the wrong half of the chip after loading a state. Fixed.
-- An **empty suspend slot or save state** crashed slot.advance at every start with that game seated. It is now ignored.
+- An **empty suspend slot or save state** crashed slot.advance at every start with that game seated. It is now set aside and the game starts fresh.
 - A save the card **failed to read** was treated as missing and then overwritten. Now the game starts without it, the red "Can't write to SD card" band shows, and nothing for that game is written until you take the cart out and put it in again.
 - After link play, the **joining** handheld saved the host's game over its own. Its own save is now left alone until the cart is put in again.
 - Game Boy games on an **MBC2** cartridge, such as Kirby's Pinball Land, no longer crash on their first save.
