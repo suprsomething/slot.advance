@@ -70,7 +70,7 @@ Real handheld footage for anything physical (the lid, waking, the handheld in a 
 | 0:06 to 0:14 | Close the lid mid-game. Cut (same take, timestamp overlay optional) to opening it hours later; game carries on at once | Your game waits in memory. Open the lid, carry on. |
 | 0:14 to 0:20 | The hourly-blocks chart, simply animated block by block | About 2 to 3.2% an hour asleep (Wi-Fi off, extended tests) |
 | 0:20 to 0:32 | UI capture: tap MENU, the in-game menu appears; down to Settings, Screen, change the shader; back, Resume | New: the in-game menu |
-| 0:32 to 0:40 | UI capture: double tap into States, pick a state | Your save states, one tap away |
+| 0:32 to 0:40 | UI capture: double tap MENU into States, pick a state | Your save states: double tap MENU |
 | 0:40 to 0:52 | UI capture: Settings > Network, Wi-Fi On, the Networks list, join; carousel with the Wi-Fi icon | Optional Wi-Fi, off by default |
 | 0:52 to 1:05 | UI capture of the Web Interface screen, then real footage of a laptop browser showing Syncthing with "slot.advance Saves" up to date | Your Saves and States, synced on your own network |
 | 1:05 to 1:12 | Handheld: close the lid with Wi-Fi on; open it; game is back | Wi-Fi steps aside before every sleep |
@@ -94,7 +94,7 @@ For the release page, use `documentation/releases/advance-0.5.0.md`. For a short
 > - **Wi-Fi, off by default:** join a network from Settings with an on-screen keyboard. Before every sleep it saves your game, then takes Wi-Fi down.
 > - **Syncthing built in:** keep your Saves and States in step with your computer or home server, on your own network.
 >
-> With Wi-Fi off, sleep and battery work as in 0.4.2. Upgrade by copying the download's `System` folder onto your games card.
+> With Wi-Fi off, sleep and battery work as in 0.4.2. To upgrade, copy the contents of the download's `System` folder into the existing `System` folder on your games card, replacing files when asked. Don't replace the `System` folder itself.
 >
 > Download and release notes: https://github.com/suprsomething/slot.advance/releases/tag/advance-0.5.0 · https://slotadvance.com
 >

@@ -4,7 +4,7 @@ This guide explains how to use slot.advance on the **Anbernic RG SP (2026)**: th
 
 New to slot.advance? Start with the [README](../README.md), which covers what it is and [how to install it](../README.md#installing-and-updating). If you want to know how sleep and networking work inside, see the [Technical reference](technical.md); for how sleep and battery use were tested, see [Sleep and battery: how it evolved and how it was measured](sleep-and-battery.md).
 
-**Reading the controls tables:** buttons side by side mean either one, and a `+` means both together. **New** marks what slot.advance adds or changes compared with [slot](https://github.com/BrandonKowalski/slot) 1.7.0.
+**Reading the controls tables:** buttons side by side mean either one, and a `+` means both together. **New** marks what slot.advance adds or changes compared with [slot](https://github.com/BrandonKowalski/slot) 1.10.0.
 
 ## Contents
 
@@ -167,7 +167,7 @@ Double tap `MENU` in game, or choose **States** in the in-game menu, to open the
 | `Up` / `Down` or `Left` / `Right` | Newer / older state | **New** |
 | `A` | Load the state on screen. Nothing loads just by moving to it | |
 | `B` or `MENU` | Back to where you opened it from: the game, or the in-game menu | |
-| `Y` | Delete: asks "Delete this state?" | **New** |
+| `Y` | Delete: asks "Delete this state?" | |
 | `Y` again | Confirm the delete. Any other button keeps the state | **New** |
 | `X` | Undo the last save or load, up to 30 seconds after | |
 
@@ -526,27 +526,28 @@ Releases before 0.5.0 have no Wi-Fi menu or Syncthing. Going back to one leaves 
 
 ## Differences from slot
 
-This compares slot.advance with **slot 1.7.0**, the latest upstream release (15 October 2026) when this was last checked on 20 October 2026. Changes on upstream's main branch since then aren't included.
+This compares slot.advance 0.5.0 with **slot 1.10.0** (27 October 2026), the upstream release audited for slot.advance 0.5.0. Later upstream releases aren't included.
 
-**Why choose slot.advance:** you play GBA games on an RG SP (2026) and want real hardware sleep: close the lid and the game waits in memory for hours, opening it carries straight on, and a timed shutdown keeps the game safe. Wi-Fi stays off unless you want it, and Syncthing is built in for your saves and states. **Why choose slot:** you want its themes, wallpapers and bezels or run-ahead, or you have a different Anbernic handheld.
+**Why choose slot.advance:** you play GBA games on an RG SP (2026) and want real hardware sleep: close the lid and the game waits in memory for hours, opening it carries straight on, and a timed shutdown keeps the game safe. Wi-Fi stays off unless you want it, and Syncthing is built in for your saves and states. **Why choose slot:** you want its themes, wallpapers and bezels, remappable controls, screenshots or frame blending, or you have a different Anbernic handheld.
 
-| | slot 1.7.0 | slot.advance |
+| | slot 1.10.0 | slot.advance |
 |---|---|---|
-| Lid closed | Software standby: the screen goes dark but the system keeps running, and it powers off after 3 minutes | **Real hardware sleep** (suspend-to-RAM). Opening the lid carries on; it shuts down after the time set in **Settings > Sleep**, from 3 minutes to 8 hours |
+| Lid closed | Software standby: the screen goes dark but the system keeps running, and it powers off after the **Lid Off** time, from 1 to 30 minutes | **Real hardware sleep** (suspend-to-RAM). Opening the lid carries on; it shuts down after the time set in **Settings > Sleep**, from 3 minutes to 8 hours |
 | Wi-Fi | On whenever BaseOS starts it | **Off** by default; switched on, joined and forgotten in **Settings > Network**, and taken down before every sleep. See [Wi-Fi and networks](#wi-fi-and-networks) |
+| Syncing saves | Not built in | **Syncthing** for Saves and States, set up in a browser |
 | Unused USB host controllers | On | **Off** |
-| In-game menu | Resume, States, Settings, Exit Game over the dimmed game, with a short Settings list (shader, colour correction, palette and gameplay rows) | The **same four rows**, with the **full Settings** in a game (Date & Time, GB Palettes and the other platform's shader hidden), and the shader, colour correction and fast-forward rows **changing that game only**. `B` and `MENU` go back one level |
-| Save states | 10 per game; the switcher moves with Left / Right; `Y` deletes straight away | **5** per game; **Up / Down** as well; deleting **asks first** |
+| In-game menu | Resume (with Undo Save or Undo Load for 30 seconds after one), States, Screenshots (once you have taken one), Settings and Exit Game, with a short Settings list of screen and gameplay rows | **Resume, States, Settings and Exit Game**, with the **full Settings** in a game (Date & Time, GB Palettes and the other platform's shader hidden), and the shader, colour correction and fast-forward rows **changing that game only**. `B` and `MENU` go back one level |
+| Save states | 10 per game; deleting asks first (`Y`, then `X`) | **5** per game; `Up` / `Down` or `Left` / `Right`; deleting asks first (`Y`, then `Y`) |
 | Per-game settings | Shader and colour correction are set for each platform (GBA, GB, GBC) and shared by all its games | **Each game remembers** its shader, colour correction, fast-forward speed and fast-forward sound |
 | GBA screen shader | Grid by default | **Off** by default (GBA is an exact 3x on the 720 x 480 screen, so it is already pixel perfect) |
 | Recents | Off until switched on in Settings | **On**, the last 10 games started |
-| Switching shelves | `L1` / `R1` | `L1` / `R1`, and **`L2` / `R2`** |
-| Low battery | Shuts down at 5% | A quiet **banner at 15% and 10%** first, then the same 5% shutdown |
+| Controls | Remappable: in-game buttons, shortcuts and shelf keys | Fixed; shelves switch with `L1` / `R1` and also **`L2` / `R2`** |
+| Low battery | A low-battery light from 20%; shuts down at 5% | A quiet **banner at 15% and 10%**, then the same 5% shutdown |
 | About screen | A "back of the console" sticker | The **version, number of games, free space** on the games card and **battery** |
 | Devices | Several Anbernic handhelds | The **RG SP (2026) only** |
 
-**In both:** Favourites (`Y` stars a game onto its own shelf), a Recents shelf of the last 10 games, returning to where you were after a reboot (slot to the shelf and cart selected at power-off, slot.advance to the game you last played), optional game titles taken from the file name without its tags, and an in-game menu on a tap of `MENU`. slot fades the title into the shelf name; slot.advance shows it above the selected cartridge. Both also share everything slot.advance inherited: the cartridge shelf, the save-state switcher, rewind, fast-forward, link play, the two emulators and the power menu.
+**In both:** Favourites (`Y` stars a game onto its own shelf), a Recents shelf of the last 10 games, returning to where you were after a reboot (slot to the shelf and cart selected at power-off, slot.advance to the game you last played), optional game titles taken from the file name without its tags, an in-game menu on a tap of `MENU`, and unloading the Wi-Fi driver before Restart and Power off. slot fades the title into the shelf name; slot.advance shows it above the selected cartridge. Both also share everything slot.advance inherited: the cartridge shelf, the save-state switcher, rewind, fast-forward, link play, the two emulators and the power menu.
 
-**Only in slot 1.7.0:** light and dark themes with bundled wallpapers and wallpaper tint, per-platform bezels, one-frame run-ahead for GBA, held directions repeating in menus, and support for other Anbernic devices.
+**Only in slot 1.10.0:** light and dark themes with bundled wallpapers and wallpaper tint, per-platform bezels, remappable controls, screenshots, frame blending, a picture Scale setting, Date & Time by city with daylight saving and a 12-hour clock, a Game Boy Advance Video shelf, a Load State on Insert setting, repairing a card that has turned read-only, held directions repeating in menus, and support for other Anbernic devices. slot removed its run-ahead option in 1.8.0.
 
 **Where the shared features came from.** slot.advance was forked from slot on 9 October 2026, shortly after 1.5.0, so everything in slot up to then is Brandon T. Kowalski's work and that of slot's contributors. slot.advance's Recents is adapted from ciscosweater's community fork, slots, whose favourites tab also inspired slot.advance's Favourites. slot.advance's game titles and reopening on the last game were written for it. slot later added its own Favourites, Recents, remembered shelf and Game Titles in 1.7.0, built separately. slot.advance's in-game menu is adapted from slot 1.7.0's (the page, its rows, its pause and input guards, the short reveal delay and hiding Exit Game with one cart), with its own Settings.
