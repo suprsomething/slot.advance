@@ -3,8 +3,8 @@
 
 Run from the repository root:  python3 documentation/battery-tests/calculate-0.5.0.py
 
-Unlike calculate.py, the raw device reports for these runs are not in this repository
-yet: they are kept in the project's working folder (Phase 0B, Phase 0C, R3 and V1 result
+Unlike calculate.py, the raw device reports for these runs are not in this repository:
+they are kept in the project's development records (Phase 0B, Phase 0C, R3 and V1 result
 folders). The inputs below are transcribed from the reviewed results records
 (design/v5-phase0b-results.md, design/v5-phase0c-results.md, design/v5-r3-results.md and
 design/v5-phase1-review.md in the project files), and everything derived from them is

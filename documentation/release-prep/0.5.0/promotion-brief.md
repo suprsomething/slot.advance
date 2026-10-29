@@ -8,24 +8,25 @@ The aim: tell existing and new players what 0.5.0 adds in a few seconds, without
 
 ## 1. Suggested website changes
 
-Keep the page's structure, styling and video. Change only what 0.5.0 makes out of date, and add three short feature blocks.
+Keep the page's structure, styling and video. Change only what 0.5.0 makes out of date, and add three short feature blocks. The site's feature blocks today are text only (its only pictures are the logo, the video and the two charts), so the new blocks are text only too, in the same style. *Checked against `website/public/index.html` at Checkpoint E, 29 October 2026.*
 
 | Where | Today | Suggested |
 |---|---|---|
 | Hero and video | Logo, video, the three-line promise | Unchanged. Re-cut the video later only if a 0.5.0 teaser is made (section 4) |
 | "Open and continue" (wake chart) | 35% less resume time in 0.4.1, Wi-Fi off; "with Wi-Fi on, both take about 0.82 s" | Keep the chart and its 0.4.0 to 0.4.1 comparison, labelled as Wi-Fi off. Replace the last sentence's "Wi-Fi on" wording, which meant the old hidden setting, with: "With Wi-Fi On in 0.5.0, the game is back about as quickly; Wi-Fi reconnects in the background." Don't add R3's 819 ms to the chart: it is a different experiment |
 | "Lower standby drain" (hourly blocks) | ~7% vs ~2 to 3.2% an hour | Keep. Add "Wi-Fi off" to the 0.4.x label, as in the README chart. Add one line under it: "With Wi-Fi on, 0.5.0 takes Wi-Fi down before every sleep; in testing, an 8-hour sleep read the same 2% an hour." |
-| New block: "Wi-Fi when you want it" | | Copy in section 3, with `network-syncthing-on.png` |
-| New block: "Your saves, everywhere" (Syncthing) | | Copy in section 3, with `syncthing-web-interface.png` |
-| New block: "Pause, adjust, carry on" (in-game menu) | | Copy in section 3, with `in-game-menu.png` and `in-game-settings-screen.png` |
-| "Your games, within reach" | Shelf screenshots | Optionally swap in `carousel-wifi.png` |
-| Download link and version text | 0.4.2 | 0.5.0, once released |
+| New block: "Wi-Fi when you want it" | | Copy in section 3, text only |
+| New block: "Your saves, everywhere" (Syncthing) | | Copy in section 3, text only |
+| New block: "Pause, adjust, carry on" (in-game menu) | | Copy in section 3, text only |
+| "Remembered per game" | Shader, colour correction, fast-forward speed and sound | Unchanged; the in-game menu block mentions changing them in a game |
+| "Your games, within reach" and the other blocks | Text | Unchanged |
+| Version or download text | None on the page (it links to GitHub) | Nothing to change |
 
-Not suggested: a redesign, new sections for every setting, battery-life promises, comparisons with other firmware, or any claim about pending fixes.
+Not suggested: a redesign, screenshots added to the blocks, new sections for every setting, battery-life promises, comparisons with other firmware, or a save-safety block (the fixes belong in the release notes, not the pitch).
 
 ## 2. Screenshots for the website
 
-All rendered by slot.advance's own code (`.github/resources/screenshots/advance/0.5.0/`). In priority order:
+The site's blocks don't use screenshots, so these are for the GitHub release, any announcement post and a possible later gallery. All rendered by slot.advance's own code (`.github/resources/screenshots/advance/0.5.0/`), and checked against the merged code at Checkpoint E. In priority order; the first three are the README's set:
 
 1. `carousel-wifi.png`: the shelf, with the Wi-Fi icon.
 2. `in-game-menu.png`: Resume, States, Settings, Exit Game.
@@ -71,13 +72,14 @@ Real handheld footage for anything physical (the lid, waking, the handheld in a 
 | 0:14 to 0:20 | The hourly-blocks chart, simply animated block by block | About 2 to 3.2% an hour asleep (Wi-Fi off, extended tests) |
 | 0:20 to 0:32 | UI capture: tap MENU, the in-game menu appears; down to Settings, Screen, change the shader; back, Resume | New: the in-game menu |
 | 0:32 to 0:40 | UI capture: double tap MENU into States, pick a state | Your save states: double tap MENU |
-| 0:40 to 0:52 | UI capture: Settings > Network, Wi-Fi On, the Networks list, join; carousel with the Wi-Fi icon | Optional Wi-Fi, off by default |
+| 0:40 to 0:52 | UI capture: Settings > Network, Wi-Fi On (the restart prompt, then a cut), the Networks list, join; carousel with the Wi-Fi icon | Optional Wi-Fi, off by default |
 | 0:52 to 1:05 | UI capture of the Web Interface screen, then real footage of a laptop browser showing Syncthing with "slot.advance Saves" up to date | Your Saves and States, synced on your own network |
 | 1:05 to 1:12 | Handheld: close the lid with Wi-Fi on; open it; game is back | Wi-Fi steps aside before every sleep |
 | 1:12 to 1:20 | Logo on the striped card; slotadvance.com | slot.advance 0.5.0, for the RG SP (2026) |
 
 Notes:
 - Use a test network name and a fresh Syncthing pairing on camera; don't show a real network name, address, device ID or password. Blur or crop the browser's address bar if it shows a real address.
+- Switching Wi-Fi on takes effect at the next restart. Show the prompt and cut past the restart; don't edit it to look instant.
 - Don't show a stopwatch or claim a specific wake time in the video; "instant" is the claim, and the measured figures live in the docs.
 - No battery-life claims beyond the one caption, which carries its qualifier.
 - Keep it under 90 seconds and under the site's 25 MiB per-file limit if self-hosted.
@@ -94,10 +96,10 @@ For the release page, use `documentation/releases/advance-0.5.0.md`. For a short
 > - **Wi-Fi, off by default:** join a network from Settings with an on-screen keyboard. Before every sleep it saves your game, then takes Wi-Fi down.
 > - **Syncthing built in:** keep your Saves and States in step with your computer or home server, on your own network.
 >
-> With Wi-Fi off, sleep and battery work as in 0.4.2. To upgrade, copy the contents of the download's `System` folder into the existing `System` folder on your games card, replacing files when asked. Don't replace the `System` folder itself.
+> It also brings save-safety fixes from upstream slot, including one for games with a 128 KB flash save, such as the Game Boy Advance Pokémon games. With Wi-Fi off, sleep and battery work as in 0.4.2. To upgrade, copy the contents of the download's `System` folder into the existing `System` folder on your games card, replacing files when asked. Don't replace the `System` folder itself.
 >
 > Download and release notes: https://github.com/suprsomething/slot.advance/releases/tag/advance-0.5.0 · https://slotadvance.com
 >
 > slot.advance is a GBA-focused fork of slot by Brandon T. Kowalski.
 
-<!-- RELEASE-PREP: the release link above is provisional until the tag exists. -->
+*The release link works once the tag is published.*

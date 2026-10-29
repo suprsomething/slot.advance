@@ -4,7 +4,7 @@ This guide explains how to use slot.advance on the **Anbernic RG SP (2026)**: th
 
 New to slot.advance? Start with the [README](../README.md), which covers what it is and [how to install it](../README.md#installing-and-updating). If you want to know how sleep and networking work inside, see the [Technical reference](technical.md); for how sleep and battery use were tested, see [Sleep and battery: how it evolved and how it was measured](sleep-and-battery.md).
 
-**Reading the controls tables:** buttons side by side mean either one, and a `+` means both together. **New** marks what slot.advance adds or changes compared with [slot](https://github.com/BrandonKowalski/slot) 1.10.0.
+**Reading the controls tables:** buttons side by side mean either one, and a `+` means both together. **New** marks what slot.advance adds or changes compared with [slot](https://github.com/BrandonKowalski/slot) 1.11.0.
 
 ## Contents
 
@@ -99,8 +99,6 @@ Shader, colour correction and fast-forward changes made in game are saved **for 
 ---
 
 ## The in-game menu
-
-<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
 
 <p align="center">
 <img src="../.github/resources/screenshots/advance/0.5.0/in-game-menu.png" width="48%" alt="The in-game menu: Resume, States, Settings and Exit Game, with Resume selected">
@@ -213,13 +211,23 @@ If the [in-game menu](#the-in-game-menu) was open when the lid closed, the game 
 
 ### Safety nets
 
-- **Unsaved games are never switched off by the timer.** If the game can't be written to the card when the lid closes, the RG SP (2026) keeps sleeping and retries the save; only the 5% battery shutdown can end it.
+- **Unsaved games are never switched off by the timer.** If the game can't be written to the card when the lid closes, the RG SP (2026) keeps sleeping and retries the save; only the 5% battery shutdown can end it. The exception is a game slot.advance is deliberately not saving, because [the card couldn't read its save files](#when-a-save-cant-be-read) or because you [joined a link session](#link-play) with it: there is nothing to retry, so the timer can still switch it off, and that session's progress is lost.
 - **Low battery:** sleep is planned to aim to preserve approximately 10% of the battery, waking and shutting down early if needed. At 10% or less it sleeps for 3 minutes. At 5% it saves and shuts down, as in slot. On the charger, sleep isn't shortened.
 - **With the lid shut, `POWER` does nothing**, so the screen never lights inside a closed case. A charger or other stray wake sends it straight back to sleep, without reconnecting to Wi-Fi.
 - **If hardware sleep isn't available or fails**, that sleep falls back to software standby: the screen goes dark, the system keeps running, and it shuts down after 3 minutes.
 - Each sleep and wake is written to `slot.log` on the games card.
 
 How all of this works inside is in the [Technical reference](technical.md).
+
+### When a save can't be read
+
+If a game's battery save, or its suspend slot (`resume.state`), is on the card but the card fails to read it, slot.advance protects the file rather than treating it as missing:
+
+- The game starts **without** it, and the red **"Can't write to SD card / Progress is not being saved"** band appears.
+- Until you take the cart out and put it in again, slot.advance writes **neither** file for that game: not at the automatic save, when the lid closes, on eject or at power off, and new save states are refused. Both are held back together, because a suspend slot also carries the battery save inside it. The file it couldn't read is never replaced with a blank one.
+- Nothing you play in the meantime is saved. Closing the lid still sleeps, but if the sleep time runs out the RG SP (2026) shuts down without saving that session.
+
+**What to do:** stop playing that game. Take the cart out and put it in again (hold `MENU`, or **Exit Game**), or Restart if the card holds only one game. Each insert reads both files afresh, so if the read works this time the band goes and saving carries on as normal. If the band comes back, power off, put the games card in a computer, copy `Saves`, `States` and `Config` somewhere safe, then check the card. A game with no save yet, such as one you've never played, never raises the band.
 
 ---
 
@@ -403,6 +411,16 @@ Link play (the link cable and the wireless adapter) runs over Wi-Fi between two 
 
 While a link session is open, it has the radio to itself: the RG SP (2026) leaves your home network, and Syncthing can't sync until the session ends. When the session ends, it reconnects by itself. The [in-game menu](#the-in-game-menu) can't open during link play.
 
+### If you join a session
+
+With mGBA (the default emulator), the RG SP (2026) that **joins** a session runs the host's game, with the host's save, for as long as the link needs it. So that the host's game can never be saved over yours, slot.advance stops writing **your** game's battery save and suspend slot once you join, and keeps them that way **until the cart comes out**, not just until the link ends:
+
+- Your own saves stay exactly as they were before you joined.
+- Nothing from that session is saved to your game, including anything you play after the link has ended. A sleep that runs out its timer shuts down without saving it.
+- New save states and another link session are refused until then.
+
+To carry on with your own game, take the cart out and put it in again (hold `MENU`, or **Exit Game**), or Restart if the card holds only one game. It starts from your own save and suspend slot as they were before you joined. Nothing on screen points this out yet; a reminder is planned for a later release. The host's saves work normally throughout.
+
 ---
 
 ## Battery
@@ -496,6 +514,10 @@ Releases before 0.5.0 have no Wi-Fi menu or Syncthing. Going back to one leaves 
 
 **I want to go back to an earlier version.** See [Going back](#going-back).
 
+**A red band says "Can't write to SD card / Progress is not being saved".** slot.advance can't save the game you're playing. It shows when the card has turned read-only, when a write to it failed (it clears once a later write works), or when the game's save or suspend slot couldn't be read. In every case, stop playing and see [When a save can't be read](#when-a-save-cant-be-read) for what to do.
+
+**After link play, my game isn't saving and save states are refused.** You joined the session, so your own save is protected until the cart comes out. See [If you join a session](#if-you-join-a-session).
+
 **slot.advance went back to the carousel by itself.** It probably crashed, and the RG SP (2026) started it again straight away. The game's battery save and suspend slot are as they were at the last automatic save, at most about a minute earlier, and your five save states are untouched. The details are kept in the `crash` folder on the games card; please [report it](#reporting-a-problem).
 
 **Something else went wrong.** Don't power on again yet: `slot.log` and `slot.log.1` are replaced each time slot.advance starts. Copy them from the games card first, then follow [Reporting a problem](#reporting-a-problem).
@@ -512,6 +534,8 @@ Releases before 0.5.0 have no Wi-Fi menu or Syncthing. Going back to one leaves 
 - **Saved network keys are not encrypted** in `Config/wifi.txt`: anyone with the games card can use them to join those networks.
 - **Syncthing syncs on the local network only**, and only while the RG SP (2026) is awake and Wi-Fi is on. It is not a backup: see [Syncing is not a backup](#syncing-is-not-a-backup).
 - **Files copied onto the card from a computer can show shifted modified times.** Normal syncing works, but when a save was changed in two places before syncing, the shift can decide which version keeps the normal name. [Details](#file-times-and-conflict-copies).
+- **After joining a link session, your game isn't saved until the cart comes out.** No reminder appears on screen yet. [Details](#if-you-join-a-session).
+- **If a save or suspend slot can't be read, that game isn't saved until the cart is put in again**, so a file the card failed to read is never overwritten. The red card band shows meanwhile. [Details](#when-a-save-cant-be-read).
 - **The sleep timer always ends with a shutdown**, even on the charger. The game is restored at the next power-on.
 
 ---
@@ -526,11 +550,11 @@ Releases before 0.5.0 have no Wi-Fi menu or Syncthing. Going back to one leaves 
 
 ## Differences from slot
 
-This compares slot.advance 0.5.0 with **slot 1.10.0** (27 October 2026), the upstream release audited for slot.advance 0.5.0. Later upstream releases aren't included.
+This compares slot.advance 0.5.0 with **slot 1.11.0** (28 October 2026), upstream's latest release when 0.5.0 was prepared. slot.advance 0.5.0's fixes from upstream were checked against 1.10.0; 1.11.0 changed none of the rows below.
 
 **Why choose slot.advance:** you play GBA games on an RG SP (2026) and want real hardware sleep: close the lid and the game waits in memory for hours, opening it carries straight on, and a timed shutdown keeps the game safe. Wi-Fi stays off unless you want it, and Syncthing is built in for your saves and states. **Why choose slot:** you want its themes, wallpapers and bezels, remappable controls, screenshots or frame blending, or you have a different Anbernic handheld.
 
-| | slot 1.10.0 | slot.advance |
+| | slot 1.11.0 | slot.advance |
 |---|---|---|
 | Lid closed | Software standby: the screen goes dark but the system keeps running, and it powers off after the **Lid Off** time, from 1 to 30 minutes | **Real hardware sleep** (suspend-to-RAM). Opening the lid carries on; it shuts down after the time set in **Settings > Sleep**, from 3 minutes to 8 hours |
 | Wi-Fi | On whenever BaseOS starts it | **Off** by default; switched on, joined and forgotten in **Settings > Network**, and taken down before every sleep. See [Wi-Fi and networks](#wi-fi-and-networks) |
@@ -548,6 +572,6 @@ This compares slot.advance 0.5.0 with **slot 1.10.0** (27 October 2026), the ups
 
 **In both:** Favourites (`Y` stars a game onto its own shelf), a Recents shelf of the last 10 games, returning to where you were after a reboot (slot to the shelf and cart selected at power-off, slot.advance to the game you last played), optional game titles taken from the file name without its tags, an in-game menu on a tap of `MENU`, and unloading the Wi-Fi driver before Restart and Power off. slot fades the title into the shelf name; slot.advance shows it above the selected cartridge. Both also share everything slot.advance inherited: the cartridge shelf, the save-state switcher, rewind, fast-forward, link play, the two emulators and the power menu.
 
-**Only in slot 1.10.0:** light and dark themes with bundled wallpapers and wallpaper tint, per-platform bezels, remappable controls, screenshots, frame blending, a picture Scale setting, Date & Time by city with daylight saving and a 12-hour clock, a Game Boy Advance Video shelf, a Load State on Insert setting, repairing a card that has turned read-only, held directions repeating in menus, and support for other Anbernic devices. slot removed its run-ahead option in 1.8.0.
+**Only in slot 1.11.0:** light and dark themes with bundled wallpapers and wallpaper tint, per-platform bezels, remappable controls, screenshots, frame blending, a picture Scale setting, a 1.5x fast-forward speed and a Fast Forward Toggle shortcut, Date & Time by city with daylight saving and a 12-hour clock, a Game Boy Advance Video shelf, a Load State on Insert setting, repairing a card that has turned read-only, held directions repeating in menus, and support for other Anbernic devices. slot removed its run-ahead option in 1.8.0.
 
 **Where the shared features came from.** slot.advance was forked from slot on 9 October 2026, shortly after 1.5.0, so everything in slot up to then is Brandon T. Kowalski's work and that of slot's contributors. slot.advance's Recents is adapted from ciscosweater's community fork, slots, whose favourites tab also inspired slot.advance's Favourites. slot.advance's game titles and reopening on the last game were written for it. slot later added its own Favourites, Recents, remembered shelf and Game Titles in 1.7.0, built separately. slot.advance's in-game menu is adapted from slot 1.7.0's (the page, its rows, its pause and input guards, the short reveal delay and hiding Exit Game with one cart), with its own Settings.

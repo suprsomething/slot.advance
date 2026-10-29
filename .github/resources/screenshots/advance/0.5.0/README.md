@@ -23,7 +23,7 @@ The carousel and Network images, from this branch:
 cargo run -p slot --no-default-features --example readme_050_screenshots
 ```
 
-The in-game menu images come from the render test written for the in-game menu, which writes each screen it checks when `SCRATCH_PNG_DIR` is set. They were made from `phase3-in-game-menu` at `ff79174` (test build 4's code) in a separate scratch checkout, then copied here under the names above; no in-game menu code is part of this documentation branch. Once the in-game menu is merged, from the repository root:
+The in-game menu images come from the render test written for the in-game menu, which writes each screen it checks when `SCRATCH_PNG_DIR` is set. They were made from `phase3-in-game-menu` at `ff79174` (test build 4's code), then copied here under the names above. The in-game menu is now merged into `release-0.5.0`, and at Checkpoint E (29 October 2026) every image here was rendered again from the merged code (`269faad`) and compared with these copies. To regenerate, from the repository root:
 
 ```
 SCRATCH_PNG_DIR=/tmp/in-game cargo test -p slot --no-default-features --test render_in_game_menu

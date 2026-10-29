@@ -15,7 +15,6 @@
 > [!IMPORTANT]
 > **Supported device: Anbernic RG SP (2026) only**: the clamshell model with the 720 x 480 display. Not compatible with the older RG35XX SP. For that model or any other Anbernic device, use upstream [slot](https://github.com/BrandonKowalski/slot).
 
-<!-- RELEASE-PREP: version, tag and file name below are provisional until the 0.5.0 build exists. -->
 **Latest release: [slot.advance 0.5.0](https://github.com/suprsomething/slot.advance/releases/latest)** · **[Download&nbsp;ZIP](https://github.com/suprsomething/slot.advance/releases/download/advance-0.5.0/slot.advance-0.5.0-rg-sp.zip)**
 
 [Install](#installing-and-updating) · [User guide](documentation/user-guide.md) · [Release notes](documentation/release-notes.md) · [Website](https://slotadvance.com)
@@ -23,8 +22,6 @@
 ---
 
 ## Features
-
-<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
 
 - **Real hardware sleep.** Close the lid and your game waits in memory.
 - **Instant resume.** Open the lid and you're back at the same moment, with nothing reloaded.
@@ -40,7 +37,6 @@ slot.advance is a fork of **[slot](https://github.com/BrandonKowalski/slot)** by
 
 ## Screenshots
 
-<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
 <p align="center">
 <img src=".github/resources/screenshots/advance/0.5.0/carousel-wifi.png" width="64%" alt="The All shelf with Pokémon Unbound cartridge-label artwork, a gold favourite star, and a Wi-Fi icon beside the clock">
 <br>
@@ -99,8 +95,6 @@ Going back to an earlier version is covered in the [User guide](documentation/us
 
 ## Controls
 
-<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
-
 | Button | What it does |
 |---|---|
 | `L2` / `R2` | Switch between All, Recents and Favourites |
@@ -121,6 +115,7 @@ Every control and setting is in the **[User guide](documentation/user-guide.md)*
 ## Help
 
 - **Screen still dark after a quick lid flick?** Close the lid and open it again. Your game carries on.
+- **Red "Can't write to SD card" band?** That game isn't being saved. Stop playing it and see [what to do](documentation/user-guide.md#when-a-save-cant-be-read).
 - **A synced save seems older than expected?** Look for a Syncthing conflict copy beside it. [Details](documentation/user-guide.md#file-times-and-conflict-copies).
 - **Found a bug?** Before you power on again, copy `slot.log` and `slot.log.1` from the games card, plus `crash/cores.log` and the newest `crash/slot-….log` if there is a `crash/` folder. The next start-up replaces the logs. Then [open an issue](https://github.com/suprsomething/slot.advance/issues/new/choose). The full steps, troubleshooting and known limitations are in the [User guide](documentation/user-guide.md#troubleshooting).
 
@@ -132,7 +127,6 @@ Every control and setting is in the **[User guide](documentation/user-guide.md)*
 
 **For developers:** [Technical reference](documentation/technical.md) · [Sleep and battery measurements](documentation/sleep-and-battery.md) · [Building](documentation/building.md)
 
-<!-- RELEASE-PREP: provisional version. -->
 This build: **0.5.0** · [All releases](https://github.com/suprsomething/slot.advance/releases)
 
 ---

@@ -1,9 +1,8 @@
 # Technical reference
 
-<!-- RELEASE-PREP: written for 0.5.0 ahead of its release; the version references and the pending save-safety section are provisional. -->
 This page describes how the current release, **slot.advance 0.5.0**, puts the RG SP (2026) to sleep, wakes it, shuts it down on a timer, manages hardware it doesn't use, runs Wi-Fi and Syncthing, and shows the in-game menu. It is written for technically curious players and anyone who wants to work on the code, and it names the source files involved.
 
-It describes **0.5.0**. With Wi-Fi off (the default), sleep, wake, the lid, the RTC timer, USB and power management work as in 0.4.1 and 0.4.2; 0.5.0 adds [Wi-Fi On](#wi-fi-on), [Syncthing](#syncthing), [the in-game menu](#the-in-game-menu) and a bounded [Wi-Fi driver unload before Restart and Power off](#restart-and-power-off). How sleep evolved through 0.3.0 and 0.4.0, the configurations that were tested, the battery and wake-up measurements, and how far they can be trusted are in **[Sleep and battery: how it evolved and how it was measured](sleep-and-battery.md)**. What the features do and how to use them is in the **[README](../README.md)** and the **[User guide](user-guide.md)**.
+It describes **0.5.0**. With Wi-Fi off (the default), sleep, wake, the lid, the RTC timer, USB and power management work as in 0.4.1 and 0.4.2; 0.5.0 adds [Wi-Fi On](#wi-fi-on), [Syncthing](#syncthing), [the in-game menu](#the-in-game-menu), a bounded [Wi-Fi driver unload before Restart and Power off](#restart-and-power-off) and four [save safety](#save-safety) fixes. How sleep evolved through 0.3.0 and 0.4.0, the configurations that were tested, the battery and wake-up measurements, and how far they can be trusted are in **[Sleep and battery: how it evolved and how it was measured](sleep-and-battery.md)**. What the features do and how to use them is in the **[README](../README.md)** and the **[User guide](user-guide.md)**.
 
 Everything here applies to the **Anbernic RG SP (2026)** (720 x 480 screen) running BaseOS 1.3.0 (Linux 4.9), the release slot.advance 0.5.0 was tested on. It does not apply to the RG35XX SP.
 
@@ -26,7 +25,7 @@ Everything here applies to the **Anbernic RG SP (2026)** (720 x 480 screen) runn
 - [Network security](#network-security)
 - [The in-game menu](#the-in-game-menu)
 - [Per-game settings](#per-game-settings)
-- [Save safety fixes (pending)](#save-safety-fixes-pending)
+- [Save safety](#save-safety)
 - [Performance and battery](#performance-and-battery)
 - [Logging](#logging)
 - [Files copied from a computer: time stamps](#files-copied-from-a-computer-time-stamps)
@@ -273,7 +272,7 @@ Measured (all from the project's validation records):
 
 ### Packaging
 
-`System/syncthing` is Syncthing **2.1.6** (linux-arm64), unmodified and statically linked. Its archive's SHA-256 is checked against Syncthing's signed `sha256sum.txt.asc` when the release is built. Its licence (MPL-2.0), authors and version and hash record are in `System/licenses/` (`syncthing-LICENSE.txt`, `syncthing-AUTHORS.txt`, `syncthing.txt`). Automatic upgrades are off (`--no-upgrade`, `STNOUPGRADE`, `autoUpgradeIntervalH` 0), so the version changes only with a slot.advance release. Including it makes the download about 15 MB. <!-- RELEASE-PREP: confirm from the release build. -->
+`System/syncthing` is Syncthing **2.1.6** (linux-arm64), unmodified and statically linked. When the release is built, the archive's SHA-256 is checked against the value published in Syncthing's signed `sha256sum.txt.asc` for 2.1.6, which is pinned in `scripts/syncthing.sh` with the program's own hash; the release workflow checks the program again before packaging. Its licence (MPL-2.0), authors and version and hash record are in `System/licenses/` (`syncthing-LICENSE.txt`, `syncthing-AUTHORS.txt`, `syncthing.txt`). Automatic upgrades are off (`--no-upgrade`, `STNOUPGRADE`, `autoUpgradeIntervalH` 0), so the version changes only with a slot.advance release. Including it makes the download about 15 MB (test build 4's package was 15,081,637 bytes).
 
 ### When it runs
 
@@ -360,11 +359,9 @@ With Wi-Fi off the driver is already gone, so nothing changes. Sleep and resume 
 
 *New in 0.5.0. Assessment, mockups and build: `design/v5-in-game-menu-assessment.md`, `design/v5-in-game-menu-mockups.md`, `design/v5-in-game-menu-build.md` (project files). Adapted from upstream slot (Brandon T. Kowalski): 91f6000, 696c35a, f63b009, 468d417, ec38517, f1ea0d0, with tests from b9e1d87.*
 
-<!-- RELEASE-PREP: pending the in-game menu device checkpoint (test build 4). Confirm the reveal delay as tested, then remove this note. -->
-
 - **An overlay, not a screen.** The game stays in `Phase::Playing`; an `in_game` field on the app (`crates/slot/src/app/in_game.rs`) says which page is drawn over it. Everything that looks for a seated game (lid-close saving, the autosave every minute, the battery-critical save, the clock rule and the per-game profile lookup) keeps seeing it. Settings could not simply reuse the carousel's menu screens, because those count as "no game seated".
 - **Pause.** The overlay is part of `Session::held()`, the same path the power menu and SlotLink screen use: the core is paused (`sync_speed`) and the pad cleared, so no input reaches the game, and fast-forward and rewind can't start behind it. Audio stops with the paused core and comes back as after the save-state switcher.
-- **Timing.** A tap of `MENU` pauses at once; the menu is drawn **180 ms** later, so a double tap (within `MENU_DOUBLE_TAP_MS`, 350 ms) goes straight to the save-state switcher with nothing flashing up. Hold (`MENU_HOLD_MS`, 1 s) ejects from any page. The gesture code is unchanged and identical to upstream's.
+- **Timing.** A tap of `MENU` pauses at once; the menu is drawn **180 ms** later (felt as instant on the RG SP in test build 4), so a double tap (within `MENU_DOUBLE_TAP_MS`, 350 ms) goes straight to the save-state switcher with nothing flashing up. Hold (`MENU_HOLD_MS`, 1 s) ejects from any page. The gesture code is unchanged and identical to upstream's.
 - **Pages.** The menu (Resume, States, Settings, Exit Game; Exit Game hidden when the card has one game, where eject is refused) and Settings with its pages, drawn exactly like the carousel's Settings on the same opaque background. Hidden rows in a game: Date & Time, the other platform's shader and GB Palettes. `B` and `MENU` climb one level; from the menu they resume. The menu always opens on Resume.
 - **Lid and `POWER`.** The doze saves and sleeps exactly as from play. On waking, the overlay is still there; from the Network screens or About it comes back on that row of Settings.
 - **Network in a game.** The same Network screens, drawn over the paused game. A Restart saves the suspend slot first and is refused if that fails. Ejecting or a link starting closes the Network screen.
@@ -383,19 +380,49 @@ Each game's shader, colour correction, fast-forward speed and fast-forward sound
 
 ---
 
-## Save safety fixes (pending)
+## Save safety
 
-> [!WARNING]
-> **Draft, not yet implemented.** The fixes below were accepted as 0.5.0 release blockers after the final upstream reliability audit (28 October 2026, `design/v5-upstream-reliability-audit.md` in the project files). They are to be made on a separate save-safety branch after the in-game menu checkpoint, then host-tested, independently reviewed and checked on the device. This section must be rewritten to describe what was actually integrated and verified, or removed, before release.
+*New in 0.5.0. Four save-loss defects found by the final upstream reliability audit (28 October 2026, against slot 1.10.0) and one Game Boy core crash, fixed from upstream slot's own fixes (Brandon T. Kowalski) and mGBA's. Build record: `design/v5-save-safety-build.md` and `design/v5-upstream-reliability-audit.md` (project files). Merged as `269faad`.*
 
-<!-- RELEASE-PREP: replace with the integrated and verified description, with commits, once the save-safety checkpoint passes. Until then nothing below is shipped behaviour. -->
+| | Defect | Fix in 0.5.0 | From |
+|---|---|---|---|
+| M1 | A GBA game with a 128 KB flash save (two 64 KB banks) was put back on bank 0 by every state load, so its next save could land in the wrong half of the chip | `cores/mgba/flash-bank-survives-mask.patch`: the flash bank survives a state load | upstream slot b0fe199 |
+| D2 | A Game Boy game on an MBC2 cartridge crashed mGBA on its first save-RAM read | `cores/mgba/543a19758-mbc2-sram-bank.patch`, mGBA's own fix, unchanged | mGBA 543a197, as upstream slot 1b2001e |
+| M2 | An empty (zero-byte) `resume.state` or save state crashed slot, at every boot with that cart seated | `LibretroCore::unserialize` refuses empty data; the resume is then treated as refused and never overwritten | upstream slot 4e74bdd |
+| M3 | A save or resume the card **failed to read** was treated as missing, so the game started blank and the next save overwrote the real file | A failed read is an error, never "no file": see below | from upstream slot c5de4cc |
+| M4 | A SlotLink joiner on mGBA, which runs the host's machine, saved the host's game and save over its own | Once the host's state is restored, the joiner's save RAM and resume are refused: see below | from upstream slot c5de4cc |
 
-| | Defect (upstream fix) | Planned |
-|---|---|---|
-| M1 | 128 KB flash save games put back on the wrong flash bank after every state load (b0fe199) | Restore the bank after loading a state, with mGBA's MBC2 Game Boy save-RAM fix (D2, 1b2001e) bundled |
-| M2 | An empty resume or save state crashes slot, at boot every time (4e74bdd) | Treat an empty state as no state |
-| M3 | A save or suspend slot the card fails to read is treated as missing, and then overwritten (part of c5de4cc) | Treat a read failure as a failure, never as "none" |
-| M4 | A SlotLink joiner on mGBA saves the host's game over its own save (part of c5de4cc) | Keep the joiner's own save |
+### Unreadable files (M3)
+
+`persist::read_sav` and `persist::read_resume` return `Ok(None)` only for "not found"; any other error, such as an I/O error or a directory where the file should be, is an error. The `.srm` fallback is kept. In `Session` (`spawn_core`), if **either** read fails:
+
+- the game starts without that file;
+- the emulator is told to refuse **both** the save RAM and the resume (`EmuHandle::refuse_save_ram`, `refuse_resume`), so `trusted_write` passes nothing to the autosave, the lid-close flush, eject or power off, manual save states and a link reload are refused, and the resume is left where it is rather than filed away as a core refusal;
+- `App::card_unread` is set, which raises the existing card alarm (below).
+
+Both files are protected together because every mGBA state carries the save RAM inside it: a resume written over a blank game would bring a blank save back over the real one, and saves written while the resume is unread would be rolled back by the older copy inside it once it read again. The protection, and the alarm, last until the cart goes back to the shelf; the next insert reads both files afresh. A restart has the same effect. The log line is `slot: save read: …; leaving it alone until the cart goes in again` (or `resume read`).
+
+**Trade-off (accepted):** a session played while either file can't be read is not saved at all. Because nothing is written, the lid-close flush reports success, so the [timed shutdown](#the-timed-shutdown-and-restore) can still switch the RG SP off and that session's progress is lost. The real files are never touched.
+
+### The card alarm
+
+The pulsing band, "Can't write to SD card / Progress is not being saved", is upstream slot's existing card alarm, unchanged in appearance. It shows when the card is read-only (checked every 2 s), when the last write failed (cleared by the next successful one), and from 0.5.0 while `card_unread` is set. `card_unread` is deliberately not cleared by later successful writes, which would otherwise lower it almost at once through the routine `slot.state` write. A file that is simply missing, as on a first launch, never raises it, and a SlotLink joiner's refusal doesn't either. Log: `slot: card: alarm on (read-only …, unread …)`.
+
+### SlotLink joiner (M4)
+
+On mGBA the joining device restores the host's state, save RAM included, and runs the host's machine for the link (`slot: cable: restored … bytes, running the host's game`). At that point its save RAM and resume are marked refused for the rest of that core's life. So, until the cart is ejected and inserted again (or the RG SP restarts):
+
+- the joiner's own save and resume stay as they were before joining;
+- nothing is written for that game: autosave, lid close, eject, power off and the timed shutdown all skip it, including play after the link has ended;
+- manual save states and a new link session are refused.
+
+The host is unaffected. A player-facing warning is planned for 0.5.1; the [User guide](user-guide.md#if-you-join-a-session) documents the restrictions. A real two-handheld link session on 0.5.0 has not been run; M4 is covered by upstream's host-test assertions.
+
+### Verification
+
+Each fix has a test that fails on the old code and passes on the new, including real-core tests on the pinned mGBA (a synthetic 128 KB flash ROM for M1, a synthetic MBC2 ROM for D2, a zero-byte resume through the real core for M2) and unreadable files simulated with a directory at the file's path for M3. Two independent code reviews found one gap (an unreadable save alone left the resume writable), fixed before the device check. On the RG SP, test build 5 (29 October 2026) passed a Pokémon save, state save and load, second save, power cycle and cold-boot resume sequence, and showed the alarm for an unreadable save and cleared it on eject.
+
+**Known edge, accepted:** mGBA's MBC2 patch leaves one fallback branch that a corrupt or foreign state could reach; normal MBC2 and MBC7 play cannot. mGBA's current code is identical, so the patch is kept verbatim.
 
 ---
 
@@ -501,6 +528,7 @@ Conflict copies are subject to Syncthing's `maxConflicts` setting; set to 0, Syn
 - **WPA2-Personal and open networks only**; see [Wi-Fi On](#wi-fi-on). Saved network keys are not encrypted on the card.
 - **Syncthing syncs only while awake** and on the local network (global discovery and relays off). It is synchronisation, not a backup, and slot.advance doesn't detect or resolve conflicting changes.
 - **No same-night comparison of Wi-Fi On and Off standby** has been made; see [Performance and battery](#performance-and-battery).
+- **Refused saves are not written at all.** After a failed card read, or after joining a link session, a game is not saved until its cart is inserted again; the timed shutdown can end such a session without saving it. See [Save safety](#save-safety).
 - **File times from a computer** (0.5.0, with Syncthing): files copied onto the card from a Mac through an SD card reader read with a shifted modified time, probably because of the BaseOS exFAT driver. See [above](#files-copied-from-a-computer-time-stamps).
 
 ---
@@ -525,6 +553,8 @@ Conflict copies are subject to Syncthing's `maxConflicts` setting; set to 0, Syn
 | `crates/slot/src/net.rs`, `net_menu.rs`, `link_radio.rs` | The app's network handle and sleep gate, the Network screens' behaviour, SlotLink's use of the radio |
 | `crates/slot-ui/src/network.rs`, `keyboard.rs` | Drawing the Network screens and the on-screen keyboard |
 | `crates/slot/src/app/in_game.rs` | The in-game menu overlay |
+| `crates/slot/src/persist.rs`, `session.rs` | Reading saves and resumes (a failed read is an error), and refusing both writes after one |
+| `cores/mgba/*.patch` | Patches to the pinned mGBA, each copied into `System/licenses/` |
 | `card/System/launch_frontend.sh` | Starts slot and keeps the previous `slot.log` as `slot.log.1` |
 | `crates/slot/src/crash.rs` | Writes the `slot: crash:` line when slot crashes |
 | `card/System/coresave.sh` | Keeps slot's crash core, memory map and log in `crash/` on the games card |

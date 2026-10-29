@@ -2,7 +2,7 @@
 
 This page is the detail behind the sleep, wake-up and battery figures in the [README](../README.md). It covers how sleep has changed across slot.advance's releases, what 0.4.0 does when the lid closes, why 0.4.1 wakes faster, how the figures were obtained, how far they can be trusted, and what was checked on the device before each release. How the current release works, with the source files involved, is in the [Technical reference](technical.md).
 
-Everything here applies to the **Anbernic RG SP (2026)** (720 x 480 screen) running BaseOS 1.3.0 (Linux 4.9). Version numbers are **slot.advance** versions, not upstream slot's. <!-- RELEASE-PREP: provisional until 0.5.0 is released. --> **0.5.0** (tag `advance-0.5.0`) is the current release. With Wi-Fi off, the default, it sleeps and wakes as 0.4.1 and 0.4.2 do; what it adds, optional Wi-Fi and Syncthing, and how that was measured, is in [0.5.0: Wi-Fi and Syncthing](#050-wi-fi-and-syncthing). **0.4.2** (tag `advance-0.4.2`) changed nothing in sleep, wake, Wi-Fi or power management, so everything here that applies to 0.4.1 applies to it. **0.4.1** (tag `advance-0.4.1`) was released after the checks under [Validation status](#validation-status). It is 0.4.0 with one change, described in [Waking up faster in 0.4.1](#waking-up-faster-in-041). **0.4.0** (tag `advance-0.4.0`) introduced hardware sleep; **0.3.0** (tag `advance-v3`) came before it.
+Everything here applies to the **Anbernic RG SP (2026)** (720 x 480 screen) running BaseOS 1.3.0 (Linux 4.9). Version numbers are **slot.advance** versions, not upstream slot's. **0.5.0** (tag `advance-0.5.0`) is the current release. With Wi-Fi off, the default, it sleeps and wakes as 0.4.1 and 0.4.2 do; what it adds, optional Wi-Fi and Syncthing, and how that was measured, is in [0.5.0: Wi-Fi and Syncthing](#050-wi-fi-and-syncthing). **0.4.2** (tag `advance-0.4.2`) changed nothing in sleep, wake, Wi-Fi or power management, so everything here that applies to 0.4.1 applies to it. **0.4.1** (tag `advance-0.4.1`) was released after the checks under [Validation status](#validation-status). It is 0.4.0 with one change, described in [Waking up faster in 0.4.1](#waking-up-faster-in-041). **0.4.0** (tag `advance-0.4.0`) introduced hardware sleep; **0.3.0** (tag `advance-v3`) came before it.
 
 ## Contents
 
@@ -162,7 +162,7 @@ The estimates explain the hourly figures: the change from software standby to ha
 
 *Development measurements for the 0.5.0 networking design, from Phase 0 (R3, 0B, 0C) and the 0.5.0 validation builds (V1). Recalculated by [`calculate-0.5.0.py`](battery-tests/calculate-0.5.0.py).*
 
-<!-- RELEASE-PREP: the raw reports behind this section are in the project's working folder, not in this repository yet. Add them under battery-tests/ and wake-tests/ (as for 0.4.x) and point calculate-0.5.0.py at them, or keep this note. -->
+Unlike the 0.4.x results, the raw device reports for these runs are kept in the project's development records rather than in this repository. The script's inputs are transcribed from the reviewed results of each run, and everything derived from them is worked out in the script.
 
 **With Wi-Fi off (the default), nothing here changes**: the driver is unloaded about 20 seconds after start-up exactly as in 0.4.1 and 0.4.2, and the 0.4.x results above apply. What 0.5.0 adds is **Wi-Fi On**, in which the driver stays loaded, and **Syncthing**, which runs only with Wi-Fi On. The design rule, set by the measurements below, is that the game is saved first and then **`wlan0` is disconnected and taken down before every hardware sleep**, whether or not it ever connected. How that works is in the [Technical reference](technical.md#wi-fi-and-sleep).
 
@@ -334,12 +334,14 @@ The earlier experiments that established suspend, lid wake, timed wake and `POWE
 
 Link play with a second device in `wifi=on` was not retested; the code it uses is unchanged from 0.4.0.
 
-**0.5.0 validation.** <!-- RELEASE-PREP: complete once the in-game menu and save-safety checkpoints have passed. --> Checked on the device with 0.5.0 test builds, each built from the release branch at the time and validated before it was merged:
+**0.5.0 validation.** Checked on the device with 0.5.0 test builds, each built from the release branch at the time and validated before it was merged:
 
 - **0.5.0 V1, Wi-Fi (test build 1, 22 to 24 October 2026): passed.** (Not the 0.4.1 V1 wake-timing run above.) Wi-Fi Off: 14 real sleeps in play, all resumed; a timed shutdown and restore; forced suspend failures handled by retry, then software standby, then shutdown, as designed; an 8-hour sleep at 2% an hour. Wi-Fi On: joining with the keyboard, wrong password, forget and rejoin, switching networks, a password with spaces and symbols; 13 real sleeps in play, all resumed, with `wlan0` down before every one; reconnection after waking; SSH never reachable; the clock corrected only on the carousel; an 8-hour sleep at 2% an hour. 0.5.0 V1 found that Restart could leave the RG SP dark with the Wi-Fi driver loaded.
 - **Test build 2, the Restart fix (24 October 2026): passed.** 16 of 16 Restarts with the driver loaded came back by themselves (3 of 7 before the fix), with Wi-Fi Off Restarts, Wi-Fi On lid sleeps and a timed shutdown also checked.
 - **V2, integrated validation with Syncthing (test build 3, October 2026; accepted 28 October): passed, with one known limitation.** Pairing with a home server, both folders syncing both ways, credential reset, play while syncing, sleep and reconnection, Restart, Power off and the timed shutdown with Syncthing running, and a 2.5-hour battery run. Files copied onto the card from a Mac showed a 10-hour time stamp shift, accepted as a documented limitation (see the [Technical reference](technical.md#files-copied-from-a-computer-time-stamps)). Not exercised in V2, and not claimed: a peer address change, a real link session with a second handheld and an interrupted upload, which remain on the outstanding validation list.
-- **In-game menu (test build 4): pending.**
-- **Save safety fixes M1 to M4: pending** (see the [Technical reference](technical.md#save-safety-fixes-pending)).
+- **In-game menu (test build 4, 29 October 2026): passed.** A short handheld check of the menu, the save-state switcher from it, Settings and per-game shader changes, lid sleep from the menu and from the in-game Network screen (two real suspends, both woke to the paused game's menu as designed), a Restart from the in-game Network screen, and Exit Game. The 180 ms reveal felt instant. Sleep, Wi-Fi, Syncthing and battery were not re-tested, as nothing in them changed.
+- **Save safety (test build 5, 29 October 2026): passed.** A Pokémon save, state save and load, a second save, a power cycle and a cold-boot resume, all on a test copy of the game, with no corrupted-save message; and the card alarm shown for an unreadable save and cleared on eject. See the [Technical reference](technical.md#save-safety).
+
+Test build 5 is the code released as 0.5.0, apart from the version number.
 
 0.5.0's sleep path with Wi-Fi Off is 0.4.2's, and it was not re-measured beyond 0.5.0 V1's 8-hour sleep.

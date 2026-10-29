@@ -27,7 +27,7 @@ use slot_ui::{
     cart_face, cart_shadow, net_face, star_face, wifi_icon_face, word_face, NetView, WifiIcon,
 };
 
-/// An invented example, made of five words from Syncthing's passphrase word list.
+/// An invented example, made of five words from the EFF word list slot.advance draws passphrases from.
 const EXAMPLE_PASSPHRASE: &str = "lantern velvet canyon harbor pebble";
 const EXAMPLE_NETWORK: &[u8] = b"Home Wi-Fi";
 const EXAMPLE_ADDRESS: &str = "192.168.1.42";
