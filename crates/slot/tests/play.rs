@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use common::{boot, tmp_root_with_carts};
 use slot::app::Phase;
 use slot::persist;
+use slot::persist::Snapshot;
 use slot::session::Session;
 use slot_input::{Action, Btn, RawEvent};
 use slot_store::{Core, Platform, StateRing};
@@ -89,6 +90,7 @@ fn counter_after(root: &Path, hold: bool) -> u64 {
     s.app_mut().tick_ms(60_000);
     s.app_mut().settle_saves();
     let state = persist::read_resume(root, Platform::Gba, Core::Mgba, "Emerald")
+        .unwrap()
         .expect("nothing was flushed");
     u64::from_le_bytes(state.try_into().expect("the mock's state is 8 bytes"))
 }
@@ -115,5 +117,90 @@ fn a_hold_hands_the_core_no_state_and_a_tap_hands_it_the_resume() {
     assert!(
         counter_after(held.path(), true) < 500_000,
         "a hold resumed the state it was meant to skip"
+    );
+}
+
+fn seat_emerald(root: &Path) -> Session {
+    common::clocked(root);
+    let mut s = Session::boot(root.to_path_buf());
+    s.feed([RawEvent::Down(Btn::A)], 16);
+    s.feed([RawEvent::Up(Btn::A)], 32);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !matches!(s.app().phase(), Phase::Playing { .. }) {
+        assert!(Instant::now() < deadline, "the cart never seated");
+        s.update(1.0 / 60.0);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    s
+}
+
+#[cfg(unix)]
+#[test]
+fn a_save_the_card_cannot_read_is_never_replaced_with_a_blank_one() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let root = d.path();
+    let sav = root.join("Saves/GBA/Emerald.sav");
+    std::fs::create_dir_all(sav.parent().unwrap()).unwrap();
+    std::fs::write(&sav, b"the player's real save").unwrap();
+    std::fs::set_permissions(&sav, std::fs::Permissions::from_mode(0o000)).unwrap();
+    if std::fs::read(&sav).is_ok() {
+        eprintln!("running as a user who can read a mode 000 file, skipping");
+        return;
+    }
+
+    let mut s = seat_emerald(root);
+    s.app_mut().tick_ms(60_000);
+    s.app_mut().settle_saves();
+
+    std::fs::set_permissions(&sav, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert_eq!(
+        std::fs::read(&sav).unwrap(),
+        b"the player's real save",
+        "a save that failed to read was replaced by the blank one the game booted with"
+    );
+}
+
+/// A directory where the save should be fails to read for every user,
+/// root included, with an error other than "not found".
+#[test]
+fn a_save_that_fails_to_read_is_not_trusted_and_is_left_where_it_is() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let root = d.path();
+    let sav = root.join("Saves/GBA/Emerald.sav");
+    std::fs::create_dir_all(&sav).unwrap();
+    std::fs::write(sav.join("keep"), b"x").unwrap();
+
+    let mut s = seat_emerald(root);
+    assert!(
+        !s.emu().expect("no core").snapshot().save_ram_trusted(),
+        "a save the card failed to read was treated as no save, so the blank one would be written over it"
+    );
+    s.app_mut().tick_ms(60_000);
+    s.app_mut().settle_saves();
+    assert!(
+        sav.join("keep").exists(),
+        "the unreadable save was disturbed"
+    );
+}
+
+#[test]
+fn a_resume_that_fails_to_read_is_not_trusted_and_is_not_filed_away() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let root = d.path();
+    let resume = root.join("States/GBA/mgba/Emerald/resume.state");
+    std::fs::create_dir_all(&resume).unwrap();
+    std::fs::write(resume.join("keep"), b"x").unwrap();
+
+    let mut s = seat_emerald(root);
+    assert!(
+        !s.emu().expect("no core").snapshot().resume_trusted(),
+        "a resume the card failed to read was treated as no resume, so a fresh one would be written over it"
+    );
+    s.app_mut().tick_ms(60_000);
+    s.app_mut().settle_saves();
+    assert!(
+        resume.join("keep").exists(),
+        "the unreadable resume was moved or disturbed"
     );
 }

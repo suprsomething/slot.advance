@@ -296,7 +296,8 @@ fn on_mgba_a_zero_byte_resume_on_the_card_starts_the_game_instead_of_crashing() 
         .find(|p| p.file_stem().and_then(|s| s.to_str()) == Some("resume"))
         .expect("flush wrote no resume file");
     std::fs::write(&resume_file, []).expect("empty the resume");
-    let resume = slot::persist::read_resume(d.path(), Platform::Gba, Core::Mgba, "Emerald");
+    let resume = slot::persist::read_resume(d.path(), Platform::Gba, Core::Mgba, "Emerald")
+        .expect("the zero-byte resume did not read");
     assert_eq!(
         resume.as_deref(),
         Some(&[][..]),

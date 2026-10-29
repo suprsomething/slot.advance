@@ -138,6 +138,16 @@ impl EmuHandle {
         Self::spawn_as(core, rom, ring, sav, resume, Some(player))
     }
 
+    /// Never write this game's save RAM back to the card, as if the core had refused it.
+    pub fn refuse_save_ram(&self) {
+        self.shared.sav_refused.store(true, Ordering::Release);
+    }
+
+    /// Never write this game's resume state back to the card, as if the core had refused it.
+    pub fn refuse_resume(&self) {
+        self.shared.resume_refused.store(true, Ordering::Release);
+    }
+
     fn spawn_as(
         core: Box<dyn RetroCore>,
         rom: PathBuf,

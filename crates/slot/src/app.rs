@@ -331,6 +331,7 @@ pub struct App {
     link_player: Option<u8>,
     platform: Platform,
     named_core: bool,
+    resume_unread: bool,
     video_mode: VideoMode,
     link: Option<LinkSession>,
     sfx: Option<Sfx>,
@@ -525,6 +526,7 @@ impl App {
             link_player: None,
             platform: Platform::default(),
             named_core: false,
+            resume_unread: false,
             video_mode: VideoMode::default(),
             link: None,
             sfx: None,
@@ -1269,6 +1271,12 @@ impl App {
 
     pub fn set_platform(&mut self, platform: Platform) {
         self.platform = platform;
+    }
+
+    /// The card failed to read this game's resume, so it is not the core's to refuse and is
+    /// left where it is rather than filed away.
+    pub fn set_resume_unread(&mut self, unread: bool) {
+        self.resume_unread = unread;
     }
 
     pub fn set_named_core(&mut self, named: bool) {
@@ -2605,7 +2613,7 @@ impl App {
         let Some(snapshot) = &self.snapshot else {
             return;
         };
-        if snapshot.resume_trusted() {
+        if snapshot.resume_trusted() || self.resume_unread {
             return;
         }
         if !self.named_core {
