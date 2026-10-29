@@ -33,7 +33,7 @@ fn the_save_is_found_by_name_never_by_file_time() {
         .unwrap();
 
     assert_eq!(
-        read_sav(root, Platform::Gba, "Emerald").unwrap(),
+        read_sav(root, Platform::Gba, "Emerald").unwrap().unwrap(),
         b"the real save"
     );
     assert!(write_sav(root, Platform::Gba, "Emerald", b"played on").unwrap());

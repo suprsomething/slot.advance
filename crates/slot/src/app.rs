@@ -331,6 +331,7 @@ pub struct App {
     link_player: Option<u8>,
     platform: Platform,
     named_core: bool,
+    card_unread: bool,
     video_mode: VideoMode,
     link: Option<LinkSession>,
     sfx: Option<Sfx>,
@@ -525,6 +526,7 @@ impl App {
             link_player: None,
             platform: Platform::default(),
             named_core: false,
+            card_unread: false,
             video_mode: VideoMode::default(),
             link: None,
             sfx: None,
@@ -1269,6 +1271,14 @@ impl App {
 
     pub fn set_platform(&mut self, platform: Platform) {
         self.platform = platform;
+    }
+
+    /// The card failed to read this game's save or resume. Neither is written until the cart
+    /// goes in again, the resume is not the core's to refuse and is left where it is rather
+    /// than filed away, and the card alarm stays up meanwhile. Unlike a failed write, no later
+    /// successful write clears it.
+    pub fn set_card_unread(&mut self, unread: bool) {
+        self.card_unread = unread;
     }
 
     pub fn set_named_core(&mut self, named: bool) {
@@ -2475,12 +2485,14 @@ impl App {
             self.card_check_at = self.now() + CARD_CHECK_MS;
             self.card_read_only = self.power.as_ref().is_some_and(|p| p.card_read_only());
         }
-        let failing = self.card_failing.load(Ordering::Relaxed) || self.card_read_only;
+        let failing =
+            self.card_failing.load(Ordering::Relaxed) || self.card_read_only || self.card_unread;
         if failing != self.hud.alarmed() {
             eprintln!(
-                "slot: card: alarm {} (read-only {})",
+                "slot: card: alarm {} (read-only {}, unread {})",
                 if failing { "on" } else { "off" },
-                self.card_read_only
+                self.card_read_only,
+                self.card_unread
             );
         }
         self.hud.set_alarm(failing, self.now());
@@ -2605,7 +2617,7 @@ impl App {
         let Some(snapshot) = &self.snapshot else {
             return;
         };
-        if snapshot.resume_trusted() {
+        if snapshot.resume_trusted() || self.card_unread {
             return;
         }
         if !self.named_core {
