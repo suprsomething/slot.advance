@@ -478,6 +478,8 @@ All of a download's files are in its `System` folder: the slot.advance program (
 
 As when upgrading, only the contents of `System` need copying. On a Mac, don't drag the download's top-level folders (`Games`, `Saves`, `States` and so on) onto the card's folders of the same name: Finder's **Replace** would swap a whole folder for an empty one.
 
+**Switch Wi-Fi off in 0.5.0 before going back** to an earlier release. Releases before 0.5.0 read Wi-Fi On as their old hidden link-play setting: they keep the Wi-Fi driver loaded and the radio powered, don't take Wi-Fi down before sleeping as 0.5.0 does, and can leave the screen dark after a Restart until `POWER` is held, the fault 0.5.0 fixed.
+
 Releases before 0.5.0 have no Wi-Fi menu or Syncthing. Going back to one leaves `Config/wifi.txt`, `Config/syncthing/` and Syncthing's files in `System` in place, unused; delete `Config/wifi.txt` if you no longer want your network keys on the card. Before 0.5.0, a `wifi=on` line in `Config/slot.state` kept the radio on for link play.
 
 **Program only.** Copying just `System/slot` from an earlier release over `System/slot` on the card, or renaming the `slot.previous` you kept when upgrading back to `slot`, changes the program but leaves the newer cores and scripts in place. That mixed install is fine for a quick comparison, but it isn't the release as it was tested: for example, 0.4.2 also changed the gpSP core and the crash-capture script. Use a complete rollback before reporting a problem, because the version on the About screen and in `slot.log` names only the program.
