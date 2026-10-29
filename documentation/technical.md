@@ -233,7 +233,7 @@ Wi-Fi has two settings, **Off** (the default, 0.4.2's behaviour) and **On**, sto
 
 Once per boot, after the first successful connection, the network thread queries time with BusyBox `ntpd -n -w` (query only; it never sets a clock), from the router and `pool.ntp.org`, stopping after three replies. The answer is held as an absolute time until the carousel or a menu is showing with no game seated (`App::no_game_seated`), and is then applied in that moment with `clock_settime` if it differs by more than 1 second. Straight after a successful step, the RTC (`rtc0`) is written with `hwclock -u -w`, synchronously, bounded at 3 seconds (`RTC written in X ms`, or `FAILED to write the RTC (...); the system clock correction stands`). A failed step never writes the RTC. The clock is never changed while a game is seated, paused or dozing.
 
-Measured RTC drift before this change: about 3 seconds a day slow (V1).
+Measured RTC drift before this change: about 3 seconds a day slow (0.5.0 V1).
 
 ### SlotLink
 
@@ -258,12 +258,12 @@ Measured (all from the project's validation records):
 | | Result |
 |---|---|
 | Going quiet, Phase 0C (30 cycles, kernel log clock) | 13.2 to 15.2 ms |
-| Going quiet, V1 on a 0.5.0 test build (18 timed suspends in play) | 29.4 to 35.6 ms, one of 156.9 ms; cap never reached |
+| Going quiet, 0.5.0 V1 on a test build (18 timed suspends in play) | 29.4 to 35.6 ms, one of 156.9 ms; cap never reached |
 | Reconnection after a lid wake (wlan0 up to gateway reply) | median 6.7 to 7.5 s, range 5.9 to 13.0 s across R3 and Phase 0C; the slowest were in association, partly the router's band steering |
 | Syncthing syncing again after a longer sleep | about a minute, set by its 60-second reconnection interval (Phase 0D) |
 | Peer address changed while asleep | recovered after 280.9 s, once (Phase 0D); how often this happens was not established |
 
-**Why `wlan0` must be down.** In Phase 0C, a sleep with the driver loaded and `wlan0` left as BaseOS leaves it (up, never connected) was estimated at about 102 mA, against 66 and 74 mA for sleeps prepared as above, and the kernel log showed the driver taking a different suspend path (`rtw_suspend_normal: ### ERROR #### driver in IPS`). One segment only, so the cause is inferred, not established; it is why 0.5.0 never sleeps with `wlan0` up. Before 0.5.0, a hand-written `wifi=on` for link play slept in that state.
+**Why `wlan0` must be down.** In Phase 0C, a sleep with the driver loaded and `wlan0` left as BaseOS leaves it (up, never connected) was estimated at about 102 mA, against 66 and 74 mA for sleeps prepared as above, and the kernel log showed the driver taking a different suspend path (`rtw_suspend_normal: ### ERROR #### driver in IPS`). One segment only, so the cause is inferred, not established; it is why 0.5.0 never sleeps with `wlan0` up. Before 0.5.0, a hand-written `wifi=on` for link play most likely slept in that state too (inferred; its standby use was never measured).
 
 ---
 
@@ -273,7 +273,7 @@ Measured (all from the project's validation records):
 
 ### Packaging
 
-`System/syncthing` is Syncthing **2.1.6** (linux-arm64), unmodified and statically linked. Its archive's SHA-256 is checked against Syncthing's signed `sha256sum.txt.asc` when the release is built. Its licence (MPL-2.0), authors and version and hash record are in `System/licenses/` (`syncthing-LICENSE.txt`, `syncthing-AUTHORS.txt`, `syncthing.txt`). Automatic upgrades are off (`--no-upgrade`, `STNOUPGRADE`, `autoUpgradeIntervalH` 0), so the version changes only with a slot.advance release. Including it makes the download about 15 MB.
+`System/syncthing` is Syncthing **2.1.6** (linux-arm64), unmodified and statically linked. Its archive's SHA-256 is checked against Syncthing's signed `sha256sum.txt.asc` when the release is built. Its licence (MPL-2.0), authors and version and hash record are in `System/licenses/` (`syncthing-LICENSE.txt`, `syncthing-AUTHORS.txt`, `syncthing.txt`). Automatic upgrades are off (`--no-upgrade`, `STNOUPGRADE`, `autoUpgradeIntervalH` 0), so the version changes only with a slot.advance release. Including it makes the download about 15 MB. <!-- RELEASE-PREP: confirm from the release build. -->
 
 ### When it runs
 
@@ -330,7 +330,7 @@ Syncthing is stopped by a REST shutdown (3 s), then `SIGTERM` (1.5 s), then `SIG
 
 ## Restart and Power off
 
-*From 0.5.0. Found in V1: with the Wi-Fi driver loaded, Restart sometimes left the RG SP dark instead of restarting (4 of 7 restarts). Adapted from upstream slot e236c1f, ad5ce8a and c5de4cc.*
+*From 0.5.0. Found in 0.5.0 V1: with the Wi-Fi driver loaded, Restart sometimes left the RG SP dark instead of restarting (4 of 7 restarts). Adapted from upstream slot e236c1f, ad5ce8a and c5de4cc.*
 
 Every path ends in `DevicePlatform::restart` or `poweroff` (`crates/slot-power/src/device.rs`): the power menu, the Network screen's Restart, the timed shutdown after sleep, the doze time-out and the low-battery shutdown. With Wi-Fi On, the app first stops Syncthing (at most 5 s) and the network (`wlan0` down, supplicant stopped, at most 3 s). Then the platform:
 
@@ -348,7 +348,7 @@ With Wi-Fi off the driver is already gone, so nothing changes. Sleep and resume 
 | Safeguard | How |
 |---|---|
 | Wi-Fi Off by default | No network code runs; the driver is unloaded as in 0.4.x |
-| SSH stopped while networked | BaseOS can run `dropbear` (SSH). Before any join, `ssh.rs` stops it, and the supplicant is never started unless it is stopped. It is checked again after joins, wakes and DHCP events and every minute while connected; if it comes back and won't stop, the handheld leaves the network. With Wi-Fi Off, SSH is left as BaseOS starts it (there is no network to reach it). In V1, the device-side check found port 22 open 0 times in 29 starts, and an outside check 0 times in 1,364 tries |
+| SSH stopped while networked | BaseOS can run `dropbear` (SSH). Before any join, `ssh.rs` stops it, and the supplicant is never started unless it is stopped. It is checked again after joins, wakes and DHCP events and every minute while connected; if it comes back and won't stop, the handheld leaves the network. With Wi-Fi Off, SSH is left as BaseOS starts it (there is no network to reach it). In 0.5.0 V1, the device-side check found port 22 open 0 times in 29 starts, and an outside check 0 times in 1,364 tries |
 | Network keys | Derived WPA2 keys only, never the typed password; never in `slot.log`, crash files or synced folders, and never on screen. Not encrypted on the card (exFAT has no permissions). `slot.log` does record the names of networks joined |
 | Syncthing web interface | HTTPS with Syncthing's self-signed certificate, user and random five-word password, enforced at every start and health check. It listens on all addresses, so anyone on the same network can reach the login page, and only while the handheld is awake and on that network |
 | Syncthing exposure | Global discovery, relays and NAT traversal off; usage and crash reporting off |
@@ -501,7 +501,7 @@ Conflict copies are subject to Syncthing's `maxConflicts` setting; set to 0, Syn
 - **WPA2-Personal and open networks only**; see [Wi-Fi On](#wi-fi-on). Saved network keys are not encrypted on the card.
 - **Syncthing syncs only while awake** and on the local network (global discovery and relays off). It is synchronisation, not a backup, and slot.advance doesn't detect or resolve conflicting changes.
 - **No same-night comparison of Wi-Fi On and Off standby** has been made; see [Performance and battery](#performance-and-battery).
-- **File times from a computer** (0.5.0, with Syncthing): files copied onto the card by a computer read with a shifted modified time, because of the BaseOS exFAT driver. See [above](#files-copied-from-a-computer-time-stamps).
+- **File times from a computer** (0.5.0, with Syncthing): files copied onto the card from a Mac through an SD card reader read with a shifted modified time, probably because of the BaseOS exFAT driver. See [above](#files-copied-from-a-computer-time-stamps).
 
 ---
 

@@ -177,8 +177,8 @@ The figures below are of four kinds, labelled as such:
 
 | Run | Build and state before sleep | Result | Kind |
 |---|---|---|---|
-| V1-B, October 2026 | 0.5.0 test build 1, Wi-Fi Off; 8-hour sleep on the timer | 77% to 61%: 2.0% an hour (1.88 to 2.12 within whole-percent readings) | Measured gauge reading |
-| V1-D, 24 October 2026 | 0.5.0 test build 1, Wi-Fi On, connected, then taken down before sleeping; 8-hour sleep (28,797 s) on the timer | 80% to 64%: 2.0% an hour (1.88 to 2.13) | Measured gauge reading |
+| 0.5.0 V1-B, October 2026 | 0.5.0 test build 1, Wi-Fi Off; 8-hour sleep on the timer | 77% to 61%: 2.0% an hour (1.88 to 2.12 within whole-percent readings) | Measured gauge reading |
+| 0.5.0 V1-D, 24 October 2026 | 0.5.0 test build 1, Wi-Fi On, connected, then taken down before sleeping; 8-hour sleep (28,797 s) on the timer | 80% to 64%: 2.0% an hour (1.88 to 2.13) | Measured gauge reading |
 | Phase 0C, C90, 20 October 2026 | 0.4.2 with a test kit modelling the 0.5.0 design: connected, then disconnected and `wlan0` down; 90 minutes | ~66 mA | Estimated current (3 gauge steps) |
 | Phase 0C, C30, 20 October 2026 | As C90; 30 minutes | ~74 mA (± 7, mostly from the awake-current estimate) | Estimated current (2 gauge steps) |
 | Phase 0C, R, 20 October 2026 | Experimental: driver loaded, never connected, `wlan0` left up as BaseOS leaves it; 60 minutes | ~102 mA | Estimated current (3 gauge steps). **Not 0.5.0's behaviour** |
@@ -187,7 +187,7 @@ What these show, and what they don't:
 
 - **Sleeps prepared as 0.5.0 prepares them came out close to Wi-Fi off.** The two estimates, 66 and 74 mA, are close to Experiment 5's ~70 mA for Wi-Fi off, and the two 8-hour sleeps on the same 0.5.0 test build read the same 2% an hour on the gauge, one with Wi-Fi off and one with Wi-Fi on.
 - **They don't show that every 0.5.0 sleep uses 66 to 74 mA, or that Wi-Fi On and Off use identical standby power.** The estimates rest on two or three gauge steps each, from one session that started its sleeps from the boot screen rather than from a game. The comparison with Wi-Fi off is across different sessions, not the same night. The two 8-hour sleeps were single runs; with whole-percent readings at each end, a difference of up to two gauge steps over 8 hours (about 9 mA) couldn't be ruled out.
-- **The 102 mA segment is why `wlan0` is taken down.** Suspending with the interface up and idle took the driver down a different suspend path in the kernel log (`rtw_suspend_normal: ### ERROR #### driver in IPS`) and was followed by a higher awake current. **Inferred, not established:** that the radio stays in a higher-power state through that kind of sleep. It was one segment and is not representative of 0.5.0, which never sleeps in that state. (Before 0.5.0, a hand-written `wifi=on` for link play did.)
+- **The 102 mA segment is why `wlan0` is taken down.** Suspending with the interface up and idle took the driver down a different suspend path in the kernel log (`rtw_suspend_normal: ### ERROR #### driver in IPS`) and was followed by a higher awake current. **Inferred, not established:** that the radio stays in a higher-power state through that kind of sleep. It was one segment and is not representative of 0.5.0, which never sleeps in that state. (Before 0.5.0, a hand-written `wifi=on` for link play most likely did too; that was inferred, not measured.)
 - Syncthing doesn't run while asleep: it is frozen with every other process during suspend.
 
 ### Awake, while playing
@@ -203,7 +203,7 @@ What these show, and what they don't:
 | B3: Wi-Fi On, Syncthing syncing Saves and States with a home server | 501 mA (2.4) | +27 mA more (Syncthing); +56 mA, about 13%, in all | ~7.0 h |
 
 - **Method.** slot.advance 0.4.2 with a test kit whose network helper played the part of 0.5.0's Wi-Fi and Syncthing. Pokémon Emerald on mGBA in its intro loop, lid open, no input, unplugged, with the same volume, brightness and settings in every run. Each run is compared over **the same stretch of battery, 78% to 53%**, because current rises as the voltage falls. One run per configuration.
-- **What is solid.** Each difference is about five times its standard error, so Wi-Fi and Syncthing really do add current while awake on this device.
+- **What is solid.** Each difference is at least five times its combined standard error, so Wi-Fi and Syncthing really do add current while awake on this device.
 - **What isn't.** The gauge's own calibration error is unknown, and matching the battery range reduces but doesn't remove it. One network (with its own background traffic), one workload, one run each. The projected play times divide 3,500 mAh by the estimate and ignore the rise in current as the battery empties: they are rough, and **not guaranteed battery life**.
 - **Inferred, not measured:** the Wi-Fi cost comes with about 8 MB an hour of background traffic received on that network, and the Syncthing cost mostly with uploading the suspend slot that slot.advance saves every minute (about 25 MB an hour). The split was not measured separately.
 
@@ -217,7 +217,7 @@ What these show, and what they don't:
 
 - **Measured:** keeping the driver loaded added about 15 to 25 ms (one or two display refreshes) to an ~0.82 s wake, with no `mmc2` timeouts, failed suspends or unexpected wakes. Session C reconnected after all 14 wakes, in a median of 6.7 seconds, in the background. **Assumption:** a difference of 15 to 25 ms isn't noticeable.
 - R3 used the same definitions and watcher as the 0.4.1 measurement above, but **it is a separate experiment**: a different session, build (0.4.2) and charge level. Its 819 ms is not part of the 0.4.0 to 0.4.1 comparison (1,251 to 808 ms), and the two shouldn't be read as one controlled series.
-- **Not timed on a 0.5.0 build.** The 0.5.0 validation builds resumed reliably with Wi-Fi On and Off (V1: 14 sleeps with Wi-Fi Off and 13 with Wi-Fi On during play, every one resumed), but first-frame times were not separately measured on them.
+- **Not timed on a 0.5.0 build.** The 0.5.0 validation builds resumed reliably with Wi-Fi On and Off (0.5.0 V1: 14 sleeps with Wi-Fi Off and 13 with Wi-Fi On during play, every one resumed), but first-frame times were not separately measured on them.
 
 ---
 
@@ -336,10 +336,10 @@ Link play with a second device in `wifi=on` was not retested; the code it uses i
 
 **0.5.0 validation.** <!-- RELEASE-PREP: complete once the in-game menu and save-safety checkpoints have passed. --> Checked on the device with 0.5.0 test builds, each built from the release branch at the time and validated before it was merged:
 
-- **V1, Wi-Fi (test build 1, 22 to 24 October 2026): passed.** Wi-Fi Off: 14 real sleeps in play, all resumed; a timed shutdown and restore; forced suspend failures handled by retry, then software standby, then shutdown, as designed; an 8-hour sleep at 2% an hour. Wi-Fi On: joining with the keyboard, wrong password, forget and rejoin, switching networks, a password with spaces and symbols; 13 real sleeps in play, all resumed, with `wlan0` down before every one; reconnection after waking; SSH never reachable; the clock corrected only on the carousel; an 8-hour sleep at 2% an hour. V1 found that Restart could leave the RG SP dark with the Wi-Fi driver loaded.
+- **0.5.0 V1, Wi-Fi (test build 1, 22 to 24 October 2026): passed.** (Not the 0.4.1 V1 wake-timing run above.) Wi-Fi Off: 14 real sleeps in play, all resumed; a timed shutdown and restore; forced suspend failures handled by retry, then software standby, then shutdown, as designed; an 8-hour sleep at 2% an hour. Wi-Fi On: joining with the keyboard, wrong password, forget and rejoin, switching networks, a password with spaces and symbols; 13 real sleeps in play, all resumed, with `wlan0` down before every one; reconnection after waking; SSH never reachable; the clock corrected only on the carousel; an 8-hour sleep at 2% an hour. 0.5.0 V1 found that Restart could leave the RG SP dark with the Wi-Fi driver loaded.
 - **Test build 2, the Restart fix (24 October 2026): passed.** 16 of 16 Restarts with the driver loaded came back by themselves (3 of 7 before the fix), with Wi-Fi Off Restarts, Wi-Fi On lid sleeps and a timed shutdown also checked.
 - **V2, integrated validation with Syncthing (test build 3, October 2026; accepted 28 October): passed, with one known limitation.** Pairing with a home server, both folders syncing both ways, credential reset, play while syncing, sleep and reconnection, Restart, Power off and the timed shutdown with Syncthing running, and a 2.5-hour battery run. Files copied onto the card from a Mac showed a 10-hour time stamp shift, accepted as a documented limitation (see the [Technical reference](technical.md#files-copied-from-a-computer-time-stamps)). Not exercised in V2, and not claimed: a peer address change, a real link session with a second handheld and an interrupted upload, which remain on the outstanding validation list.
 - **In-game menu (test build 4): pending.**
 - **Save safety fixes M1 to M4: pending** (see the [Technical reference](technical.md#save-safety-fixes-pending)).
 
-0.5.0's sleep path with Wi-Fi Off is 0.4.2's, and it was not re-measured beyond V1's 8-hour sleep.
+0.5.0's sleep path with Wi-Fi Off is 0.4.2's, and it was not re-measured beyond 0.5.0 V1's 8-hour sleep.

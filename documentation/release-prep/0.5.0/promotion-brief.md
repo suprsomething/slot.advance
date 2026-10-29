@@ -94,7 +94,7 @@ For the release page, use `documentation/releases/advance-0.5.0.md`. For a short
 > - **Wi-Fi, off by default:** join a network from Settings with an on-screen keyboard. Before every sleep it saves your game, then takes Wi-Fi down.
 > - **Syncthing built in:** keep your Saves and States in step with your computer or home server, on your own network.
 >
-> With Wi-Fi off, sleep and battery are exactly as in 0.4.2. Upgrade by copying the download's `System` folder onto your games card.
+> With Wi-Fi off, sleep and battery work as in 0.4.2. Upgrade by copying the download's `System` folder onto your games card.
 >
 > Download and release notes: https://github.com/suprsomething/slot.advance/releases/tag/advance-0.5.0 · https://slotadvance.com
 >

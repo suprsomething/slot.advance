@@ -32,7 +32,7 @@ Optional Wi-Fi, Syncthing for Saves and States, and an in-game menu. With Wi-Fi 
 - **Wi-Fi, off by default.** **Settings > Network** switches Wi-Fi on (at the next restart) or off (at once), lists networks, joins them with an on-screen keyboard and forgets them. WPA2-Personal and open networks; WPA3-only networks are explained and refused. Saved networks join by themselves. A Wi-Fi icon on the carousel shows the connection. [Wi-Fi and networks](user-guide.md#wi-fi-and-networks).
 - **Real sleep with Wi-Fi on.** The game is saved first; then the RG SP disconnects and takes Wi-Fi down before every sleep, and reconnects in the background after you open the lid. Networking can't delay sleep by more than half a second.
 - **Syncthing 2.1.6, built in**, syncing **Saves** and **States** with your other devices on the same network. Set up from a browser through the RG SP's own web interface (HTTPS, user `slotadvance`, a random five-word password per device, shown on the Web Interface screen, with a reset). Runs only with Wi-Fi on and its toggle on, and only while awake. [Syncthing](user-guide.md#syncthing-syncing-saves-and-states).
-- **In-game menu.** Tap `MENU` in a game for **Resume, States, Settings and Exit Game**, with the game paused. Settings in a game is the full Settings menu, apart from Date & Time; its shader, colour correction and fast-forward rows change that game only. Double tap and hold `MENU` work as before. Adapted from upstream slot's in-game menu. [The in-game menu](user-guide.md#the-in-game-menu).
+- **In-game menu.** Tap `MENU` in a game for **Resume, States, Settings and Exit Game**, with the game paused. Settings in a game is the full Settings menu, apart from Date & Time and GB Palettes, with only the shader for the game's platform; its shader, colour correction and fast-forward rows change that game only. Double tap and hold `MENU` work as before. Adapted from upstream slot's in-game menu. [The in-game menu](user-guide.md#the-in-game-menu).
 - **Clock from the network.** With Wi-Fi on, the clock is set from the internet once per start, only while no game is running, and saved to the RG SP's clock.
 
 **Fixed**
@@ -45,18 +45,18 @@ Optional Wi-Fi, Syncthing for Saves and States, and an in-game menu. With Wi-Fi 
 
 **Changed**
 - Link play is switched on with **Wi-Fi On** in Settings > Network rather than by editing `Config/slot.state`. An existing `wifi=on` line carries over as Wi-Fi On.
-- With Wi-Fi on, sleeping no longer leaves the Wi-Fi interface up. In a development test, a sleep in that old state was estimated at about 102 mA; prepared as 0.5.0 does, about 66 to 74 mA.
-- The download is about 15 MB, because it includes Syncthing.
+- With Wi-Fi on, sleeping no longer leaves the Wi-Fi interface up. In one experimental 60-minute development segment, a sleep with the interface left up was estimated at about 102 mA; two sleeps prepared as 0.5.0 does, about 66 and 74 mA. Standby with 0.4.x's `wifi=on` itself was never measured.
+- The download is about 15 MB, because it includes Syncthing. <!-- RELEASE-PREP: confirm the size from the release build. -->
 
 **Battery** (development measurements; see [0.5.0: Wi-Fi and Syncthing](sleep-and-battery.md#050-wi-fi-and-syncthing))
 - **Wi-Fi off:** unchanged. An 8-hour sleep on a 0.5.0 test build read 2% an hour.
 - **Wi-Fi on, asleep:** two sleeps prepared as 0.5.0 does were estimated at about 66 and 74 mA, and an 8-hour sleep read 2% an hour. Close to Wi-Fi off; not shown to be identical.
 - **While playing:** about 445 mA with Wi-Fi off, 474 mA with Wi-Fi on and 501 mA with Syncthing syncing too, about 13% more in all, in one workload. No battery life is guaranteed.
 
-**Checked on the device:** V1 (Wi-Fi Off and On, including two 8-hour sleeps), test build 2 (the Restart fix) and V2 (integrated validation with Syncthing). See [Validation status](sleep-and-battery.md#validation-status).
+**Checked on the device:** 0.5.0 V1 (Wi-Fi Off and On, including two 8-hour sleeps), test build 2 (the Restart fix) and V2 (integrated validation with Syncthing). See [Validation status](sleep-and-battery.md#validation-status).
 
 **Known limitations**
-- Files copied onto the games card from a computer can show modified times shifted by the computer's difference from UTC, which can decide which version Syncthing keeps under the normal name when a save was changed in two places before syncing. Normal syncing works. [Details](user-guide.md#file-times-and-conflict-copies).
+- Files copied onto the games card from a Mac through an SD card reader showed modified times shifted by the computer's difference from UTC (10 hours, in Brisbane). That can decide which version Syncthing keeps under the normal name when a save was changed in two places before syncing. Normal syncing works. [Details](user-guide.md#file-times-and-conflict-copies).
 - Switching Wi-Fi on needs a restart. WPA3-only, enterprise, WEP and hidden networks can't be joined.
 - Syncthing syncs on the local network only, and is synchronisation, not a backup.
 - Anyone with the games card can read the network keys in `Config/wifi.txt`.

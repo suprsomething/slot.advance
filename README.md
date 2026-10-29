@@ -29,6 +29,7 @@
 - **Super-efficient standby.** About 2 to 3.2% of the battery an hour asleep, in extended tests with Wi-Fi off. Sleep for 3 minutes to 8 hours, then a clean automatic shutdown that restores the game at the next power-on.
 - **Optional Wi-Fi, off by default.** Turn it on in **Settings > Network** to join a network, set the clock from the internet or use link play. Before every sleep it disconnects and takes the Wi-Fi interface down.
 - **Syncthing built in.** Sync your **Saves** and **States** with another device running Syncthing on the same network, such as a computer or home server, set up from a browser.
+<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
 - **In-game menu.** Tap `MENU` in a game for **Resume, States, Settings and Exit Game**, with the game paused. Shader, colour correction and fast-forward changes made there apply to that game.
 - **The cartridge shelf you know.** All, Recents and Favourites, five save states per game with previews, and a carousel that reopens on the last game played.
 
@@ -43,6 +44,7 @@ slot.advance is a fork of **[slot](https://github.com/BrandonKowalski/slot)** by
 <br><sub>The <b>carousel</b>, with the Wi-Fi icon shown while Wi-Fi is on</sub>
 </p>
 
+<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
 <p align="center">
 <img src=".github/resources/screenshots/advance/0.5.0/in-game-menu.png" width="48%" alt="The in-game menu: Resume, States, Settings and Exit Game, with Resume selected">
 <img src=".github/resources/screenshots/advance/0.5.0/in-game-settings-screen.png" width="48%" alt="Settings opened from a GBA game: GBA Shader LCD3x, Color Correction On, Show Game Titles Off">
@@ -106,6 +108,8 @@ Going back to an earlier version is covered in the [User guide](documentation/us
 ---
 
 ## Controls
+
+<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
 
 | Button | What it does |
 |---|---|

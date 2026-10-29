@@ -100,6 +100,8 @@ Shader, colour correction and fast-forward changes made in game are saved **for 
 
 ## The in-game menu
 
+<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
+
 <p align="center">
 <img src="../.github/resources/screenshots/advance/0.5.0/in-game-menu.png" width="48%" alt="The in-game menu: Resume, States, Settings and Exit Game, with Resume selected">
 <img src="../.github/resources/screenshots/advance/0.5.0/in-game-settings.png" width="48%" alt="Settings opened from a game: Screen, Gameplay, Network Off, Sleep 30 min and About, with no Date and Time row">
@@ -113,7 +115,7 @@ Shader, colour correction and fast-forward changes made in game are saved **for 
 | **Resume** | Close the menu and carry on playing |
 | **States** | The [save-state switcher](#save-states), as a double tap of `MENU` opens it. `B` returns to the menu |
 | **Settings** | The same Settings as on the carousel, over the paused game. See [Settings in a game](#settings-in-a-game) |
-| **Exit Game** | Save and go back to the carousel, as holding `MENU` does. Not shown when the card holds only one game |
+| **Exit Game** | Eject the game and go back to the carousel, as holding `MENU` does, saving it first if **Auto Save on Eject** is on (the default). Not shown when the card holds only one game, where ejecting isn't possible |
 
 | Button | In the menu |
 |---|---|
@@ -121,14 +123,14 @@ Shader, colour correction and fast-forward changes made in game are saved **for 
 | `A` | Open it |
 | `B` or `MENU` | Go back one level; from the menu itself, resume the game |
 | Double tap `MENU` | Open the save-state switcher |
-| Hold `MENU` | Save and go back to the carousel, from any page |
+| Hold `MENU` | Eject and go back to the carousel, from any page (not with only one game on the card) |
 
 While the menu or any page under it is open:
 
 - **The game stays paused**, and no button reaches it. Fast-forward and rewind can't start behind the menu.
 - **Brightness, blue light filter and volume** work as usual.
 - **The usual automatic save** of the suspend slot carries on, as during play.
-- **Closing the lid, or tapping `POWER`, saves and sleeps exactly as in a game.** When you open the lid, the game is still paused on the menu page you left. If you were on the **Network** screens or **About**, you come back to that row of Settings.
+- **Closing the lid, or tapping `POWER`, saves and sleeps exactly as in a game.** When you open the lid, the game is still paused on the menu page you left (from the save-state switcher, on the menu). If you were on the **Network** screens or **About**, you come back to that row of Settings.
 - **During link play**, tapping `MENU` does nothing: the menu can't open over a link session.
 
 ### Settings in a game
@@ -194,7 +196,7 @@ The save always comes first. With Wi-Fi on, slot.advance then disconnects from t
 | `2 hr` | 2 hours | ~4 to 6.4% |
 | `8 hr` | 8 hours | ~16 to 26% |
 
-<sub>Mathematical projections at 2 to 3.2% an hour, the range of the three extended sleeps on 0.4.x with Wi-Fi off, not measurements at every duration. The longest sleeps observed were 16% over exactly 8 hours (0.4.0-beta.3), 20% over 7 h 46 min (0.4.0) and 24% over 7 h 37 min (0.4.1-beta.1). Real use varies with battery age, temperature and charge level. Longer settings are more convenient but use more battery. The measurements, including the 0.5.0 sleeps with Wi-Fi on, are in [Sleep and battery](sleep-and-battery.md#battery-results).</sub>
+<sub>Mathematical projections at 2 to 3.2% an hour, the range of the three extended sleeps on 0.4.x with Wi-Fi off, not measurements at every duration. The longest sleeps observed were 16% over exactly 8 hours (0.4.0-beta.3), 20% over 7 h 46 min (0.4.0) and 24% over 7 h 37 min (0.4.1-beta.1). Real use varies with battery age, temperature and charge level. Longer settings are more convenient but use more battery. The measurements are in [Sleep and battery](sleep-and-battery.md#battery-results), and the 0.5.0 sleeps with Wi-Fi on in [0.5.0: Wi-Fi and Syncthing](sleep-and-battery.md#050-wi-fi-and-syncthing).</sub>
 
 ### Waking up: two kinds of resume
 
@@ -205,7 +207,7 @@ The save always comes first. With Wi-Fi on, slot.advance then disconnects from t
 
 The sleep timer always ends with a shutdown, even on the charger.
 
-With Wi-Fi off (the default), wakes from RAM are quicker, because slot.advance removes the switched-off radio's stale card from the system once at start-up. If that is missed for one session, wakes in that session take a little longer; see [Troubleshooting](#troubleshooting). With Wi-Fi on, the game is back almost as quickly (in testing, a median of about 0.83 s against 0.82 s with Wi-Fi off), and Wi-Fi reconnects in the background.
+With Wi-Fi off (the default), wakes from RAM are quicker, because slot.advance removes the switched-off radio's stale card from the system once at start-up. If that is missed for one session, wakes in that session take a little longer; see [Troubleshooting](#troubleshooting). With Wi-Fi on, the game is back almost as quickly (in development tests on a 0.4.2 test build modelling 0.5.0, a median of about 0.83 s against 0.82 s with Wi-Fi off), and Wi-Fi reconnects in the background.
 
 If the [in-game menu](#the-in-game-menu) was open when the lid closed, the game wakes still paused on it.
 
@@ -296,7 +298,7 @@ With Wi-Fi on, open **Network > Networks**. It lists networks in range, with a l
 2. Type its password on the on-screen keyboard and choose **Join** (or press `START`).
 3. When it connects, the Network screen shows **Connected to** the network and the RG SP (2026)'s address.
 
-On the keyboard: `A` types the highlighted key, `B` deletes (and leaves when the field is empty), `X` types a space, `L` / `R` switch between lower case, capitals and symbols, and `Y` shows or hides what you've typed. The password is hidden by default.
+On the keyboard: `A` types the highlighted key, `B` deletes (and leaves when the field is empty), `X` types a space, `L1` / `R1` switch between lower case, capitals and symbols, and `Y` shows or hides what you've typed. The password is hidden by default.
 
 - **Saved networks join by themselves** after a restart and after waking. Choosing a saved network that's in range switches to it.
 - **To forget a network**, highlight it in the list and press `Y`.
@@ -353,7 +355,7 @@ Syncthing is set up in its **web interface**, from a phone or computer on the sa
 Syncing then runs by itself whenever both devices are awake and on the same network.
 
 - **The password** is made up at random for each RG SP (2026), the first time Syncthing is set up. You can change the user name or password in the web interface (**Actions > Settings > GUI**). After that, the RG SP (2026) shows **Changed in the web interface** instead, because it can't read the new one back.
-- **Forgotten the password?** On the Web Interface screen, press `Y` (**Reset**) and confirm. You get a new password straight away; nothing else in Syncthing changes.
+- **Forgotten the password?** On the Web Interface screen, while Syncthing shows **Running**, press `Y` (**Reset**) and confirm. You get a new password straight away; nothing else in Syncthing changes.
 - **The web interface is only reachable while the RG SP (2026) is awake**, on the network it's connected to, and only through the HTTPS address shown, with the password. Everyone on that network can reach its login page, so use it on networks you trust, such as your home Wi-Fi.
 - Syncthing on the RG SP (2026) looks for other devices on the **local network** only: internet discovery and relays are off. Both devices need to be on the same network to sync.
 - Syncthing keeps its settings, keys and database in `Config/syncthing/` on the games card.
@@ -364,7 +366,7 @@ Syncing then runs by itself whenever both devices are awake and on the same netw
 - **Syncing happens while the RG SP (2026) is awake.** It pauses while it sleeps, and carries on after you open the lid: Wi-Fi reconnects within seconds, and Syncthing reconnects to your other devices within about a minute.
 - **Playing on more than one device:** eject the game (Exit Game, or hold `MENU`) before you carry on elsewhere, so its final save is written; check in the web interface that the other device shows **Up to Date**; and let incoming changes finish before you start the game there. slot.advance doesn't detect or merge conflicting changes itself.
 - **Playing keeps syncing.** slot.advance saves each game's suspend slot about once a minute, so syncing States uploads roughly 25 MB an hour while you play (one test). Bear that in mind on a phone hotspot or a metered connection.
-- **Battery:** Wi-Fi and Syncthing use more battery while you play. In one test, Wi-Fi added about 6% and Syncthing about 6% more, about 13% together (see [Battery](#battery)). They don't run while the RG SP (2026) sleeps.
+- **Battery:** Wi-Fi and Syncthing use more battery while you play. In one test, Wi-Fi added about 6 to 7% and Syncthing about 6% more, about 13% together (see [Battery](#battery)). They don't run while the RG SP (2026) sleeps.
 - slot.advance adds an ignore list (`.stignore`) to both folders, so its own temporary files and the hidden files a Mac leaves behind (such as `.DS_Store` and `._` files) don't sync. Lines you add to it yourself are kept.
 
 ### Syncing is not a backup
@@ -399,7 +401,7 @@ Link play (the link cable and the wireless adapter) runs over Wi-Fi between two 
 1. Switch **Wi-Fi** on in **Settings > Network** and restart (see [Switching Wi-Fi on and off](#switching-wi-fi-on-and-off)). You don't need to join a network for link play.
 2. In a game, press `SELECT` + `MENU` to host or join a link session, as in slot.
 
-While a link session is open, it has the radio to itself: the RG SP (2026) leaves your home network, and Syncthing pauses. When the session ends, it reconnects by itself. The [in-game menu](#the-in-game-menu) can't open during link play.
+While a link session is open, it has the radio to itself: the RG SP (2026) leaves your home network, and Syncthing can't sync until the session ends. When the session ends, it reconnects by itself. The [in-game menu](#the-in-game-menu) can't open during link play.
 
 ---
 
@@ -482,7 +484,7 @@ Releases before 0.5.0 have no Wi-Fi menu or Syncthing. Going back to one leaves 
 
 **The Web Interface page won't open in my browser.** Check that the RG SP (2026) is awake, connected (the Network screen shows **Connected to**) and that Syncthing shows **Running**. Use the full address shown, starting with `https://`, from a device on the same Wi-Fi. If the browser shows a certificate warning, that is expected: accept it for this address only.
 
-**I've forgotten the web interface password.** On the Web Interface screen, press `Y` (**Reset**) and confirm.
+**I've forgotten the web interface password.** On the Web Interface screen, while Syncthing shows **Running**, press `Y` (**Reset**) and confirm.
 
 **Syncthing shows Error.** Turn Syncthing off and on again in **Settings > Network**. If it stays on Error, report it with `slot.log` and `Config/syncthing/syncthing.log`.
 
@@ -533,7 +535,7 @@ This compares slot.advance with **slot 1.7.0**, the latest upstream release (15 
 | Lid closed | Software standby: the screen goes dark but the system keeps running, and it powers off after 3 minutes | **Real hardware sleep** (suspend-to-RAM). Opening the lid carries on; it shuts down after the time set in **Settings > Sleep**, from 3 minutes to 8 hours |
 | Wi-Fi | On whenever BaseOS starts it | **Off** by default; switched on, joined and forgotten in **Settings > Network**, and taken down before every sleep. See [Wi-Fi and networks](#wi-fi-and-networks) |
 | Unused USB host controllers | On | **Off** |
-| In-game menu | Resume, States, Settings, Exit Game over the dimmed game, with a short Settings list (shader, colour correction, palette and gameplay rows) | The **same four rows**, with the **full Settings** in a game (Date & Time hidden), and the shader, colour correction and fast-forward rows **changing that game only**. `B` and `MENU` go back one level |
+| In-game menu | Resume, States, Settings, Exit Game over the dimmed game, with a short Settings list (shader, colour correction, palette and gameplay rows) | The **same four rows**, with the **full Settings** in a game (Date & Time, GB Palettes and the other platform's shader hidden), and the shader, colour correction and fast-forward rows **changing that game only**. `B` and `MENU` go back one level |
 | Save states | 10 per game; the switcher moves with Left / Right; `Y` deletes straight away | **5** per game; **Up / Down** as well; deleting **asks first** |
 | Per-game settings | Shader and colour correction are set for each platform (GBA, GB, GBC) and shared by all its games | **Each game remembers** its shader, colour correction, fast-forward speed and fast-forward sound |
 | GBA screen shader | Grid by default | **Off** by default (GBA is an exact 3x on the 720 x 480 screen, so it is already pixel perfect) |

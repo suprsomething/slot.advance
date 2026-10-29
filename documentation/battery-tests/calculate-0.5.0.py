@@ -53,20 +53,20 @@ for run, (what, ma, _) in B.items():
 print("=" * 72)
 print("Phase 0C session B (20 October 2026): asleep, Experiment 5 tick method")
 print("  Build: 0.4.2 with the 0C test kit; sleeps entered from the boot screen.")
-C = [  # segment, state before sleep, estimated mA while asleep
-    ("C30", "joined, then disconnected and wlan0 down (0.5.0's design)", 74.4),
-    ("C90", "reconnected, then disconnected and wlan0 down (0.5.0's design)", 66.0),
-    ("R", "driver loaded, never connected, wlan0 left up (experimental)", 102.1),
+C = [  # segment, state before sleep, minutes asleep, gauge steps, estimated mA, note
+    ("C30", "joined, then disconnected and wlan0 down (0.5.0's design)", 30, 2, 74.4, " (+/- 7, mostly the awake-current estimate)"),
+    ("C90", "reconnected, then disconnected and wlan0 down (0.5.0's design)", 90, 3, 66.0, ""),
+    ("R", "driver loaded, never connected, wlan0 left up (experimental)", 60, 3, 102.1, ""),
 ]
-for seg, state, ma in C:
-    print(f"  {seg}: {state}: {ma} mA  [estimated current, 2 or 3 gauge steps]")
+for seg, state, mins, steps, ma, note in C:
+    print(f"  {seg}: {state}, {mins} min: {ma} mA{note}  [estimated current, {steps} gauge steps]")
 print("  Prepared for sleep as designed: 66 to 74 mA. The experimental R state is not")
 print("  0.5.0's behaviour: 0.5.0 takes wlan0 down before every hardware sleep.")
 print("  Comparison with Wi-Fi Off (Experiment 5 segment 3, 69.8 mA) is across sessions,")
 print("  not same-night: it does not show parity.")
 
 print("=" * 72)
-print("V1 (23 and 24 October 2026): 0.5.0 test build 1, overnight sleeps on the timer")
+print("0.5.0 V1 (October 2026): 0.5.0 test build 1, overnight sleeps on the timer")
 V1 = [  # session, Wi-Fi, start %, end %, hours asleep
     ("V1-B", "Wi-Fi Off", 77, 61, 8.0),
     ("V1-D", "Wi-Fi On, connected before sleep", 80, 64, 28797 / 3600),
@@ -89,6 +89,6 @@ R3 = [  # session, configuration, median ms, min, max, wakes
 for s, what, med, lo, hi, n in R3:
     print(f"  {s} {what}: median {med} ms ({lo} to {hi}, {n} wakes)  [measured, kernel log]")
 print(f"  C - A: +{R3[2][2] - R3[0][2]} ms; B - A: +{R3[1][2] - R3[0][2]} ms (one to two display refreshes)")
-print("  Same definitions as the 0.4.1 measurement (V1, 0.4.1-beta.1: median 808 ms with")
+print("  Same definitions as the 0.4.1 measurement (the 0.4.1 V1 run on 0.4.1-beta.1: 808 ms with")
 print("  Wi-Fi Off), but a different session, battery level and build: R3 is not part of")
 print("  that comparison, and the two medians are not one controlled experiment.")
