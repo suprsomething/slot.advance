@@ -317,7 +317,7 @@ fn seated_with(
     let mut a = App::boot(root);
     a.set_snapshot(snapshot);
     a.set_named_core(named);
-    a.set_resume_unread(unread);
+    a.set_card_unread(unread);
     a.on_core_ready();
     for _ in 0..120 {
         a.update(1.0 / 60.0);

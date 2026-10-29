@@ -401,7 +401,10 @@ impl Session {
         }
         let stem = match self.app.phase() {
             Phase::Shelf => {
+                // The cart is out, so there is nothing left to protect: the next insert reads
+                // both files afresh.
                 self.emu = None;
+                self.app.set_card_unread(false);
                 return;
             }
             Phase::Inserting { cart, .. } => cart.clone(),
@@ -481,7 +484,7 @@ impl Session {
             emu.refuse_save_ram();
             emu.refuse_resume();
         }
-        self.app.set_resume_unread(unread);
+        self.app.set_card_unread(unread);
         emu.set_volume(self.app.output_volume());
         emu.set_driven(self.driven);
         self.app.set_snapshot(Box::new(emu.snapshot()));

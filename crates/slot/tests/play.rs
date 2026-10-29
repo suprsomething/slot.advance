@@ -255,3 +255,132 @@ fn a_resume_that_fails_to_read_lets_no_battery_save_be_written_either() {
         "the save changed while the resume that carries a copy of it could not be read"
     );
 }
+
+fn run(s: &mut Session, frames: u32) {
+    for _ in 0..frames {
+        s.update(1.0 / 60.0);
+    }
+}
+
+fn eject_to_shelf(s: &mut Session) {
+    s.app_mut().apply(Action::Eject);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !matches!(s.app().phase(), Phase::Shelf) {
+        assert!(Instant::now() < deadline, "the cart never came out");
+        s.update(1.0 / 60.0);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    run(s, 5);
+}
+
+fn unreadable(path: &Path) {
+    std::fs::create_dir_all(path).unwrap();
+    std::fs::write(path.join("keep"), b"x").unwrap();
+}
+
+#[test]
+fn a_save_that_fails_to_read_raises_the_card_alarm_until_the_cart_comes_out() {
+    let d = tmp_root_with_carts(&["Emerald", "Fusion"]); // one cart alone never ejects
+    let root = d.path();
+    unreadable(&root.join("Saves/GBA/Emerald.sav"));
+
+    let mut s = seat_emerald(root);
+    run(&mut s, 5);
+    assert!(
+        s.app().card_alarm(),
+        "the save failed to read and nothing told the player"
+    );
+    s.app_mut().tick_ms(60_000);
+    s.app_mut().settle_saves();
+    run(&mut s, 5);
+    assert!(
+        s.app().card_alarm(),
+        "the alarm went away while the save was still unread and progress still unsaved"
+    );
+    eject_to_shelf(&mut s);
+    assert!(
+        !s.app().card_alarm(),
+        "the alarm stayed up with the cart out, where there is nothing left to protect"
+    );
+}
+
+#[test]
+fn a_resume_that_fails_to_read_raises_the_card_alarm() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let root = d.path();
+    unreadable(&root.join("States/GBA/mgba/Emerald/resume.state"));
+
+    let mut s = seat_emerald(root);
+    run(&mut s, 5);
+    assert!(
+        s.app().card_alarm(),
+        "the resume failed to read and nothing told the player"
+    );
+}
+
+#[test]
+fn a_first_launch_with_no_save_and_no_resume_raises_no_alarm() {
+    let d = tmp_root_with_carts(&["Emerald"]);
+    let root = d.path();
+
+    let mut s = seat_emerald(root);
+    run(&mut s, 5);
+    assert!(
+        !s.app().card_alarm(),
+        "a game with nothing saved yet raised the card alarm"
+    );
+    let emu = s.emu().expect("no core");
+    assert!(
+        emu.snapshot().save_ram_trusted() && emu.snapshot().resume_trusted(),
+        "a first launch was kept from saving"
+    );
+    s.app_mut().tick_ms(60_000);
+    s.app_mut().settle_saves();
+    run(&mut s, 5);
+    assert!(!s.app().card_alarm(), "the first autosave raised the alarm");
+    assert!(
+        persist::read_resume(root, Platform::Gba, Core::Mgba, "Emerald")
+            .unwrap()
+            .is_some(),
+        "a first launch wrote no resume"
+    );
+}
+
+#[test]
+fn once_the_card_reads_again_a_reinserted_cart_saves_and_shows_no_alarm() {
+    let d = tmp_root_with_carts(&["Emerald", "Fusion"]); // one cart alone never ejects
+    let root = d.path();
+    let sav = root.join("Saves/GBA/Emerald.sav");
+    unreadable(&sav);
+
+    let mut s = seat_emerald(root);
+    run(&mut s, 5);
+    assert!(s.app().card_alarm(), "the unreadable save raised no alarm");
+    eject_to_shelf(&mut s);
+
+    std::fs::remove_dir_all(&sav).unwrap();
+    std::fs::write(&sav, vec![0x5Au8; 8 * 1024]).unwrap();
+    s.feed([RawEvent::Down(Btn::A)], 100_000);
+    s.feed([RawEvent::Up(Btn::A)], 100_016);
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !matches!(s.app().phase(), Phase::Playing { .. }) {
+        assert!(Instant::now() < deadline, "the cart never went back in");
+        s.update(1.0 / 60.0);
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(
+        matches!(s.app().phase(), Phase::Playing { cart } if cart == "Emerald"),
+        "a different cart went in, so this test proves nothing: {:?}",
+        s.app().phase()
+    );
+    run(&mut s, 5);
+    assert!(
+        !s.app().card_alarm(),
+        "the alarm outlived the cart it was raised for"
+    );
+    let emu = s.emu().expect("no core");
+    assert!(
+        emu.snapshot().save_ram_trusted() && emu.snapshot().resume_trusted(),
+        "the protection outlived the cart it was for"
+    );
+}
