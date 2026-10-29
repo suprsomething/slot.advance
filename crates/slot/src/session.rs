@@ -151,7 +151,16 @@ impl Session {
         }
         actions.extend(self.gestures.tick(now));
         for action in actions {
+            let menu_was_open = self.app.in_game_open();
             self.act(action);
+            // A latched fast forward stops when the in-game menu opens, so it does not
+            // carry on by itself when the game resumes (upstream slot f63b009), and one
+            // latched behind the menu (where it cannot start) is dropped when it closes.
+            if menu_was_open != self.app.in_game_open() && self.gestures.ff_latched() {
+                for stop in self.gestures.drop_ff_latch() {
+                    self.act(stop);
+                }
+            }
         }
         self.sync_pad();
     }
@@ -179,10 +188,12 @@ impl Session {
         if trace() {
             eprintln!("slot: {action:?} in {:?}", self.app.phase());
         }
+        // Fast forward and rewind cannot start behind the in-game menu.
+        let menu_open = self.app.in_game_open();
         match action {
-            Action::RewindStart => self.rewinding = true,
+            Action::RewindStart if !menu_open => self.rewinding = true,
             Action::RewindStop => self.rewinding = false,
-            Action::FfStart => self.fast = true,
+            Action::FfStart if !menu_open => self.fast = true,
             Action::FfStop => self.fast = false,
             _ => {}
         }
@@ -339,8 +350,13 @@ impl Session {
         matches!(self.app.phase(), Phase::Playing { .. }) && !self.held()
     }
 
+    /// Something over the game holds it paused and keeps its buttons: the power menu, the
+    /// SlotLink menu, the in-game menu (0.5.0) or a shutdown.
     fn held(&self) -> bool {
-        self.app.power_menu().is_some() || self.app.game_menu_open() || self.app.shutting_down()
+        self.app.power_menu().is_some()
+            || self.app.game_menu_open()
+            || self.app.in_game_open()
+            || self.app.shutting_down()
     }
 
     fn dozing(&self) -> bool {
@@ -385,7 +401,10 @@ impl Session {
         }
         let stem = match self.app.phase() {
             Phase::Shelf => {
+                // The cart is out, so there is nothing left to protect: the next insert reads
+                // both files afresh.
                 self.emu = None;
+                self.app.set_card_unread(false);
                 return;
             }
             Phase::Inserting { cart, .. } => cart.clone(),
@@ -428,9 +447,10 @@ impl Session {
         self.app
             .set_video_mode(crate::video_mode::video_mode_for(&self.root, stem));
         self.app.set_link_loaded(serial);
-        let resume = (!self.app.starting_clean())
-            .then(|| persist::read_resume(&self.root, platform, core, stem))
-            .flatten();
+        let resume = match self.app.starting_clean() {
+            true => Ok(None),
+            false => persist::read_resume(&self.root, platform, core, stem),
+        };
         launch("resume state read");
         let player = self.app.link_player();
         let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
@@ -447,11 +467,24 @@ impl Session {
         launch("core opened");
         let sav = persist::read_sav(&self.root, platform, stem);
         launch("save read");
+        let (sav, sav_unread) = card_read("save", sav);
+        let (resume, resume_unread) = card_read("resume", resume);
         let ring = self.sink.ring();
         let emu = match player.filter(|_| platform == Platform::Gba) {
             Some(p) => EmuHandle::spawn_linked(opened.core, rom, ring, sav, resume, p),
             None => EmuHandle::spawn(opened.core, rom, ring, sav, resume),
         };
+        // A file the card failed to read is still the player's: the game starts without it, and
+        // nothing is written over it until the cart goes in again. The save and the resume go
+        // together, because every mGBA state carries the save inside it: a resume written now
+        // would bring a blank save back over the real one, and saves written while the resume
+        // is unread would be rolled back by the older copy inside it once it reads again.
+        let unread = sav_unread || resume_unread;
+        if unread {
+            emu.refuse_save_ram();
+            emu.refuse_resume();
+        }
+        self.app.set_card_unread(unread);
         emu.set_volume(self.app.output_volume());
         emu.set_driven(self.driven);
         self.app.set_snapshot(Box::new(emu.snapshot()));
@@ -486,6 +519,17 @@ impl Session {
                     self.reload_for_link(&stem, serial);
                 }
             }
+        }
+    }
+}
+
+/// What a card read gave the core, and whether the read failed (as opposed to finding nothing).
+fn card_read(what: &str, read: std::io::Result<Option<Vec<u8>>>) -> (Option<Vec<u8>>, bool) {
+    match read {
+        Ok(bytes) => (bytes, false),
+        Err(e) => {
+            eprintln!("slot: {what} read: {e}; leaving it alone until the cart goes in again");
+            (None, true)
         }
     }
 }

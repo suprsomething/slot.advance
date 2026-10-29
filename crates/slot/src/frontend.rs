@@ -606,7 +606,7 @@ struct UiFaces {
     quick_labels: Vec<UndoFace>,
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
-    quick_legend: [UndoFace; 3],
+    quick_legend: [UndoFace; 4],
     sockets: Vec<CartFace>,
     chips: Vec<CartFace>,
     blank_chip: CartFace,
@@ -799,7 +799,7 @@ fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut Quic
 }
 
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {
-    if !matches!(app.phase(), Phase::About) {
+    if !app.about_open() {
         state.shown = None;
         return;
     }

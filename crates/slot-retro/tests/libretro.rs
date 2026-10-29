@@ -307,3 +307,11 @@ fn loading_a_game_forgets_the_cached_state_size() {
     );
     assert_eq!(after, c.serialize_exact().unwrap());
 }
+
+#[test]
+fn an_empty_state_is_refused_instead_of_crashing_mgba() {
+    let _g = lock();
+    let Some(mut c) = test_core() else { return };
+    c.load(&test_rom()).unwrap();
+    assert!(c.unserialize(&[]).is_err());
+}
