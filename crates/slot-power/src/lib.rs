@@ -5,6 +5,7 @@ mod power;
 mod quiet;
 mod sim;
 mod sleep;
+mod unload;
 
 pub use device::{
     has_bit, motor_change, read_only, read_only_in, record_first_frame, rumble_node,
@@ -16,6 +17,7 @@ pub use power::Power;
 pub use quiet::{quiet_hardware, Quiet, QuietReport, StaleCard, WifiResult};
 pub use sim::SimPlatform;
 pub use sleep::{SleepPaths, Woke};
+pub use unload::{DriverUnload, Unload, UNLOAD_LIMIT, WIFI_DRIVER};
 
 use std::path::Path;
 use std::time::Duration;

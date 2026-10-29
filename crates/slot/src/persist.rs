@@ -57,7 +57,7 @@ pub fn eject(
 
 pub fn write_sav(root: &Path, platform: Platform, stem: &str, sav: &[u8]) -> std::io::Result<bool> {
     let path = sav_path(root, platform, stem);
-    if let Some(old) = read_sav(root, platform, stem) {
+    if let Ok(Some(old)) = read_sav(root, platform, stem) {
         if old == sav {
             return Ok(false);
         }
@@ -69,23 +69,30 @@ pub fn write_sav(root: &Path, platform: Platform, stem: &str, sav: &[u8]) -> std
     Ok(true)
 }
 
-pub fn read_sav(root: &Path, platform: Platform, stem: &str) -> Option<Vec<u8>> {
-    std::fs::read(sav_path(root, platform, stem))
-        .or_else(|_| {
-            std::fs::read(
-                crate::root::saves_dir(root)
-                    .join(platform.dir_name())
-                    .join(format!("{stem}.srm")),
-            )
-        })
-        .ok()
+/// The game's battery save: `Ok(None)` only when there is none on the card. A save that is
+/// there but fails to read is an error, never "no save", so it is not replaced by a blank one.
+pub fn read_sav(root: &Path, platform: Platform, stem: &str) -> std::io::Result<Option<Vec<u8>>> {
+    let srm = crate::root::saves_dir(root)
+        .join(platform.dir_name())
+        .join(format!("{stem}.srm"));
+    for path in [sav_path(root, platform, stem), srm] {
+        match std::fs::read(&path) {
+            Ok(bytes) => return Ok(Some(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(None)
 }
 
-pub fn read_resume(root: &Path, platform: Platform, core: Core, stem: &str) -> Option<Vec<u8>> {
-    StateRing::new(root, platform, core, stem)
-        .read_resume()
-        .ok()
-        .flatten()
+/// The game's resume state: `Ok(None)` only when there is none on the card.
+pub fn read_resume(
+    root: &Path,
+    platform: Platform,
+    core: Core,
+    stem: &str,
+) -> std::io::Result<Option<Vec<u8>>> {
+    StateRing::new(root, platform, core, stem).read_resume()
 }
 
 fn sav_path(root: &Path, platform: Platform, stem: &str) -> PathBuf {

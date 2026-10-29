@@ -22,7 +22,7 @@
 <path d="M604.9 166H654.8M604.9 160V172M654.8 160V172" stroke="#C2BFD0" stroke-width="2" fill="none"/>
 <circle cx="629.9" cy="166" r="5" fill="#5C596C" stroke="#EEECF4" stroke-width="1.5"/>
 <text x="594.8646397334444" y="171" font-size="15" fill="#EEECF4" font-weight="600" text-anchor="end">~7.0% an hour</text>
-<text x="32" y="226" font-size="18" fill="#EEECF4" font-weight="600">0.4.x<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep</tspan></text>
+<text x="32" y="226" font-size="18" fill="#EEECF4" font-weight="600">0.4.x<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep, Wi-Fi Off</tspan></text>
 <rect x="380.0" y="238" width="60.0" height="108" rx="4" fill="#8B7CF6" opacity="0.16"/>
 <text x="688" y="226" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="end">observed range ~2 to 3.2% an hour</text>
 <line x1="280.0" y1="238" x2="280.0" y2="346" stroke="#2E2C38" stroke-width="1"/>

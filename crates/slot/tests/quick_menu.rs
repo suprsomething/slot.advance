@@ -118,6 +118,7 @@ fn up_and_down_move_the_bar_and_wrap_at_the_ends() {
     for want in [
         QuickRow::Screen,
         QuickRow::Game,
+        QuickRow::Network,
         QuickRow::Sleep,
         QuickRow::DateTime,
         QuickRow::About,
@@ -459,7 +460,7 @@ fn fake_faces(a: &mut App) {
             .map(|i| [(id(200 + i), 60, 40), (id(210 + i), 60, 40)])
             .collect(),
         carets: [(id(300), 10, 40), (id(301), 10, 40)],
-        legend: [(id(400), 70), (id(401), 110), (id(402), 80)],
+        legend: [(id(400), 70), (id(401), 110), (id(402), 80), (id(403), 90)],
     });
     a.set_quick_clock_faces((id(500), 150, 40), (id(501), 150, 40));
 }

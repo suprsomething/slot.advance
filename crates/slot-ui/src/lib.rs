@@ -11,7 +11,9 @@ mod draw;
 mod footer;
 mod hud;
 mod icon;
+mod keyboard;
 mod link_art;
+mod network;
 mod plate;
 mod polaroids;
 mod power_menu;
@@ -25,6 +27,7 @@ mod slot_chrome;
 pub mod text;
 mod title;
 mod toast;
+mod wifi_icon;
 
 pub use about::{
     about_face, about_lines, about_rows, card_size, draw_about, AboutFields, CardSpace, Logo,
@@ -56,11 +59,13 @@ pub use hud::{
 pub use icon::{
     badge_face, icon_box, icon_face, star_face, warm_fonts, Badge, Icon, STAR_GLYPH, STAR_GOLD,
 };
+pub use keyboard::{Key, KeyOutcome, KeyPage, Keyboard, Special};
 pub use link_art::{
     link_art, LinkArt, ADAPTER_BASE_X, ADAPTER_BASE_Y, ADAPTER_H, ADAPTER_W, ARCS, ARROW_H,
     ARROW_LEFT_X, ARROW_RIGHT_X, ARROW_W, ARROW_Y, CLICKS_H, CLICKS_W, CLICKS_X, CLICKS_Y, PLUG_H,
     PLUG_TIP_X, PLUG_W, PORT_H, PORT_W, PORT_Y,
 };
+pub use network::{net_face, KeyboardView, ListRow, MenuRow, NetView};
 pub use plate::{
     arrows_hint_face, arrows_hint_width, cap_width, centred_hints, hint_face, hint_quad, hint_row,
     hint_width, title_face, word_face, word_width, Hint, UndoFace, ARROW_GAP, CAP, CAP_GAP,
@@ -93,3 +98,4 @@ pub use title::{
     TITLE_VIEW_W,
 };
 pub use toast::{toast_box, toast_face, toast_rect, Toast};
+pub use wifi_icon::{draw_wifi_icon, wifi_icon_face, wifi_icon_xy, WifiIcon, WIFI_H, WIFI_W};

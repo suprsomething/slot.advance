@@ -58,6 +58,14 @@ pub struct Frontend {
     clocks: Clocks,
     about: AboutFace,
     quick_clock: QuickClock,
+    net: NetFace,
+}
+
+/// The Network screen's face and what it was last drawn from (0.5.0).
+#[derive(Default)]
+struct NetFace {
+    tex: Option<TexId>,
+    shown: Option<slot_ui::NetView>,
 }
 
 #[derive(Default)]
@@ -145,6 +153,7 @@ impl Frontend {
             clocks: Clocks::default(),
             about: AboutFace::default(),
             quick_clock: QuickClock::default(),
+            net: NetFace::default(),
         }
     }
 
@@ -221,6 +230,11 @@ impl Frontend {
         let bolt = icon_face(Icon::Charging, BOLT_PX, HUD_INK);
         let bolt_id = compositor.create_texture(bolt.w, bolt.h, &bolt.rgba);
         self.session.app_mut().set_bolt_face(bolt_id);
+        let wifi = slot_ui::WifiIcon::ALL.map(|i| {
+            let f = slot_ui::wifi_icon_face(i);
+            compositor.create_texture(f.w, f.h, &f.rgba)
+        });
+        self.session.app_mut().set_wifi_faces(wifi);
         crate::boot_time::mark("shelf faces");
         self.upload_wallpaper(compositor);
     }
@@ -368,6 +382,7 @@ impl Frontend {
         self.title_faces.sync(self.session.app_mut(), compositor);
         sync_clock(self.session.app_mut(), compositor, &mut self.clocks);
         sync_about(self.session.app_mut(), compositor, &mut self.about);
+        sync_net(self.session.app_mut(), compositor, &mut self.net);
         sync_quick_clock(self.session.app_mut(), compositor, &mut self.quick_clock);
         sync_core_picker(
             self.session.app_mut(),
@@ -567,6 +582,11 @@ impl Frontend {
     pub fn poweroff(&mut self) {
         self.session.app_mut().poweroff();
     }
+
+    /// Wi-Fi On (0.5.0): hands the app its network thread.
+    pub fn set_net(&mut self, net: Box<dyn crate::net::Net>) {
+        self.session.app_mut().set_net(net);
+    }
 }
 
 fn legend_faces(compositor: &mut Compositor, legend: &[(&str, &str)]) -> Vec<TexId> {
@@ -586,7 +606,7 @@ struct UiFaces {
     quick_labels: Vec<UndoFace>,
     quick_values: Vec<[UndoFace; 2]>,
     quick_carets: [UndoFace; 2],
-    quick_legend: [UndoFace; 3],
+    quick_legend: [UndoFace; 4],
     sockets: Vec<CartFace>,
     chips: Vec<CartFace>,
     blank_chip: CartFace,
@@ -779,7 +799,7 @@ fn sync_quick_clock(app: &mut App, compositor: &mut Compositor, state: &mut Quic
 }
 
 fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace) {
-    if !matches!(app.phase(), Phase::About) {
+    if !app.about_open() {
         state.shown = None;
         return;
     }
@@ -808,6 +828,20 @@ fn sync_about(app: &mut App, compositor: &mut Compositor, state: &mut AboutFace)
     });
     let id = upload(compositor, &mut state.tex, face);
     app.set_about_face(id);
+}
+
+fn sync_net(app: &mut App, compositor: &mut Compositor, state: &mut NetFace) {
+    let Some(view) = app.net_view() else {
+        state.shown = None;
+        return;
+    };
+    if state.tex.is_some() && state.shown.as_ref() == Some(&view) {
+        return;
+    }
+    let face = slot_ui::net_face(&view);
+    let id = upload(compositor, &mut state.tex, face);
+    app.set_net_face(id);
+    state.shown = Some(view);
 }
 
 fn sync_core_picker(

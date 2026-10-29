@@ -3,8 +3,8 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-# slot advance follows semantic versioning; see "Versions" in README.md.
-version = "0.4.2"
+# slot.advance follows semantic versioning; see "Version numbers" in documentation/release-notes.md.
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.96"
 license = "GPL-3.0-or-later"

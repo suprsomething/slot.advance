@@ -3,7 +3,8 @@
 
 Run from the repository root:  python3 documentation/battery-tests/charts.py
 
-Every figure comes from documentation/battery-tests/calculate.py and the raw reports beside it.
+Every figure comes from documentation/battery-tests/calculate.py and the raw reports beside it,
+except the 0.5.0 awake chart, whose figures come from calculate-0.5.0.py.
 Each chart sits on its own dark card, so it reads the same in GitHub's light and dark
 themes. Caveats are drawn inside the card, directly under the data they qualify.
 """
@@ -67,7 +68,7 @@ def hourly():
     rows = [
         # name, note, low %/h, high %/h, what was seen, colour
         ("0.3.0 (semi-stock)", "software standby", 7, 7, "61% to 47% in 2 hours", CONTEXT),
-        ("0.4.x", "hardware sleep", LO_RATE, HI_RATE, "16% in 8 h, 20% in 7.8 h, 24% in 7.6 h", ACCENT),
+        ("0.4.x", "hardware sleep, Wi-Fi Off", LO_RATE, HI_RATE, "16% in 8 h, 20% in 7.8 h, 24% in 7.6 h", ACCENT),
     ]
     body = [header("Battery used per hour, lid closed",
                    "Each block is 1% of the battery, as shown by the battery gauge")]
@@ -94,15 +95,15 @@ def hourly():
     body.append(notes(372, [
         "0.3.0 (semi-stock): a modified 0.3.0 test build held in software standby for",
         "2 hours. Ordinary 0.3.0 shuts down 3 minutes after the lid closes.",
-        "0.4.x: three extended sleeps, on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1.",
+        "0.4.x (Wi-Fi Off): three extended sleeps, on 0.4.0-beta.3, 0.4.0, 0.4.1-beta.1.",
         "Observed gauge readings in whole 1% steps: not a guaranteed range, and not a",
         "controlled measurement of the improvement between releases.",
     ]))
     return card(500, "\n".join(body),
-                "Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep",
+                "Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi Off",
                 "Blocks of 1 percent, from observed battery-gauge drops. 0.3.0 (semi-stock), software standby: a modified 0.3.0 test build held in standby "
                 "went from 61% to 47% in 2 hours, about 7% an hour; ordinary 0.3.0 shuts down 3 minutes after the lid closes. "
-                "0.4.x, hardware sleep: about 2 to 3.2% an hour over three extended sleeps, 98% to 82% in 8 hours on 0.4.0-beta.3, "
+                "0.4.x, hardware sleep with Wi-Fi Off: about 2 to 3.2% an hour over three extended sleeps, 98% to 82% in 8 hours on 0.4.0-beta.3, "
                 "94% to 74% in 7 hours 46 minutes on 0.4.0 and 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1. "
                 "Observed gauge readings, not a guaranteed range or a controlled measurement of the improvement between releases.")
 
@@ -117,7 +118,7 @@ def rates():
         ("0.3.0 (semi-stock)", "software standby", CONTEXT, [
             ("Modified build, 2 h (Test B)", 14, 7203),
         ]),
-        ("0.4.x", "hardware sleep", ACCENT, [
+        ("0.4.x", "hardware sleep, Wi-Fi Off", ACCENT, [
             ("0.4.0-beta.3, 8 h", 16, 8 * 3600),
             ("0.4.0, 7 h 46 min", 20, 27987),
             ("0.4.1-beta.1, 7 h 37 min", 24, 27420),
@@ -262,10 +263,58 @@ def wake():
                 f"With wifi=on, both take about 0.82 s, and no improvement is claimed.")
 
 
+# ---------------------------------------------------------------- 0.5.0, awake (doc)
+# From documentation/battery-tests/calculate-0.5.0.py: Phase 0B, matched window 78% to 53%.
+AWAKE = [
+    ("Wi-Fi Off", "the default", 445.0, CONTEXT),
+    ("Wi-Fi On", "connected, Syncthing off", 473.9, MID),
+    ("Wi-Fi On + Syncthing", "syncing Saves and States", 501.0, ACCENT),
+]
+
+
+def awake():
+    x0, x1 = 32, 560
+    scale = (x1 - x0) / 600
+    body = [header("Battery while playing, with and without Wi-Fi",
+                   "Estimated current from battery-gauge readings, Phase 0B development tests")]
+    for v in (0, 200, 400, 600):
+        gx = x0 + v * scale
+        body.append(f'<line x1="{gx:.1f}" y1="104" x2="{gx:.1f}" y2="388" stroke="{GRID}" stroke-width="1"/>')
+        body.append(text(gx, 412, f"{v} mA", 14, INK3, anchor="middle" if v else "start"))
+    y = 112
+    base = AWAKE[0][2]
+    for i, (name, note, v, col) in enumerate(AWAKE):
+        body.append(labelled(x0, y + 20, name, note))
+        by = y + 34
+        bw = v * scale
+        body.append(f'<rect x="{x0}" y="{by}" width="{bw:.1f}" height="30" rx="4" fill="{col}"/>')
+        body.append(text(x0 + bw + 12, by + 21, f"~{v:.0f} mA", 18, INK, 650))
+        if i:
+            body.append(text(688, by + 21, f"+{v - base:.0f} mA ({100 * (v - base) / base:.0f}%)", 16, INK2, anchor="end"))
+        y += 92
+    body.append(notes(452, [
+        "Pokemon Emerald in its intro loop, lid open, same settings, one run each, compared",
+        "over the same stretch of battery (78% to 53%). Estimates, not electrical",
+        "measurements; projected full-battery play: about 7.9 h, 7.4 h and 7.0 h. Real play,",
+        "networks and batteries differ. Asleep, 0.5.0 takes Wi-Fi down first.",
+    ]))
+    lo, hi = AWAKE[0][2], AWAKE[-1][2]
+    return card(556, "\n".join(body),
+                f"Estimated current while playing: about {AWAKE[0][2]:.0f} mA with Wi-Fi Off, {AWAKE[1][2]:.0f} mA with Wi-Fi On, "
+                f"{AWAKE[2][2]:.0f} mA with Wi-Fi and Syncthing, about {100 * (hi - lo) / lo:.0f}% more in all",
+                f"Three horizontal bars from the Phase 0B development tests, estimated from battery-gauge readings over the same stretch of battery, "
+                f"78% to 53%, one run each, playing Pokemon Emerald's intro loop with the lid open: Wi-Fi Off, about {AWAKE[0][2]:.0f} mA; "
+                f"Wi-Fi On and connected with Syncthing off, about {AWAKE[1][2]:.0f} mA (+{AWAKE[1][2] - lo:.0f}); "
+                f"Wi-Fi On with Syncthing syncing Saves and States, about {AWAKE[2][2]:.0f} mA (+{hi - lo:.0f}, about {100 * (hi - lo) / lo:.0f}% more). "
+                "Projected play from a full battery: about 7.9, 7.4 and 7.0 hours. Not electrical measurements, and not guaranteed battery life. "
+                "While asleep, 0.5.0 disconnects and takes Wi-Fi down before suspending.")
+
+
 WAKE_OUT = OUT.parent / "wake"
 WAKE_OUT.mkdir(parents=True, exist_ok=True)
 (WAKE_OUT / "wake-first-frame.svg").write_text(wake())
 (OUT / "battery-drain-hourly.svg").write_text(hourly())
 (OUT / "battery-current-draw.svg").write_text(current())
 (OUT / "battery-rate-comparison.svg").write_text(rates())
+(OUT / "battery-awake-0.5.0.svg").write_text(awake())
 print("wrote", OUT)

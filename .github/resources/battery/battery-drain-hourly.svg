@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="500" viewBox="0 0 720 500" role="img" aria-labelledby="t d">
-<title id="t">Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep</title>
-<desc id="d">Blocks of 1 percent, from observed battery-gauge drops. 0.3.0 (semi-stock), software standby: a modified 0.3.0 test build held in standby went from 61% to 47% in 2 hours, about 7% an hour; ordinary 0.3.0 shuts down 3 minutes after the lid closes. 0.4.x, hardware sleep: about 2 to 3.2% an hour over three extended sleeps, 98% to 82% in 8 hours on 0.4.0-beta.3, 94% to 74% in 7 hours 46 minutes on 0.4.0 and 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1. Observed gauge readings, not a guaranteed range or a controlled measurement of the improvement between releases.</desc>
+<title id="t">Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi Off</title>
+<desc id="d">Blocks of 1 percent, from observed battery-gauge drops. 0.3.0 (semi-stock), software standby: a modified 0.3.0 test build held in standby went from 61% to 47% in 2 hours, about 7% an hour; ordinary 0.3.0 shuts down 3 minutes after the lid closes. 0.4.x, hardware sleep with Wi-Fi Off: about 2 to 3.2% an hour over three extended sleeps, 98% to 82% in 8 hours on 0.4.0-beta.3, 94% to 74% in 7 hours 46 minutes on 0.4.0 and 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1. Observed gauge readings, not a guaranteed range or a controlled measurement of the improvement between releases.</desc>
 <rect x="0.5" y="0.5" width="719" height="499" rx="14" fill="#17161D" stroke="#2E2C38"/>
 <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <text x="32" y="50" font-size="24" fill="#EEECF4" font-weight="650" text-anchor="start">Battery used per hour, lid closed</text>
@@ -15,7 +15,7 @@
 <rect x="356" y="156" width="46" height="34" rx="4" fill="#5C596C"/>
 <text x="416" y="181" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~7% an hour</text>
 <text x="688" y="142" font-size="15" fill="#A3A0B3" font-weight="400" text-anchor="end">61% to 47% in 2 hours</text>
-<text x="32" y="254" font-size="18" fill="#EEECF4" font-weight="600">0.4.x<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep</tspan></text>
+<text x="32" y="254" font-size="18" fill="#EEECF4" font-weight="600">0.4.x<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep, Wi-Fi Off</tspan></text>
 <rect x="32" y="268" width="46" height="34" rx="4" fill="#8B7CF6"/>
 <rect x="86" y="268" width="46" height="34" rx="4" fill="#8B7CF6"/>
 <rect x="140.75" y="268.75" width="44.5" height="32.5" rx="4" fill="none" stroke="#8B7CF6" stroke-width="1.5"/>
@@ -26,7 +26,7 @@
 <text x="688" y="254" font-size="15" fill="#A3A0B3" font-weight="400" text-anchor="end">16% in 8 h, 20% in 7.8 h, 24% in 7.6 h</text>
 <text x="32" y="372" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">0.3.0 (semi-stock): a modified 0.3.0 test build held in software standby for</text>
 <text x="32" y="396" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">2 hours. Ordinary 0.3.0 shuts down 3 minutes after the lid closes.</text>
-<text x="32" y="420" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">0.4.x: three extended sleeps, on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1.</text>
+<text x="32" y="420" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">0.4.x (Wi-Fi Off): three extended sleeps, on 0.4.0-beta.3, 0.4.0, 0.4.1-beta.1.</text>
 <text x="32" y="444" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">Observed gauge readings in whole 1% steps: not a guaranteed range, and not a</text>
 <text x="32" y="468" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">controlled measurement of the improvement between releases.</text>
 </g>

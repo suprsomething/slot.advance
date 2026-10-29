@@ -31,6 +31,9 @@ use crate::persist::{self, Snapshot};
 use crate::sleep::{sleep_step, SleepPlan, Verdict, POWER_QUIET_MS};
 use crate::video_mode::{self, VideoMode};
 
+mod in_game;
+pub use in_game::{InGame, MENU_REVEAL_MS};
+
 pub const INSERT_S: f32 = 0.73;
 const INSERT_HOLD_S: f32 = 0.28;
 
@@ -257,6 +260,8 @@ pub enum Phase {
         cart: String,
     },
     About,
+    /// The Network menu and its screens (0.5.0).
+    Network,
     Doze {
         cart: Option<String>,
     },
@@ -326,6 +331,7 @@ pub struct App {
     link_player: Option<u8>,
     platform: Platform,
     named_core: bool,
+    card_unread: bool,
     video_mode: VideoMode,
     link: Option<LinkSession>,
     sfx: Option<Sfx>,
@@ -378,6 +384,32 @@ pub struct App {
     /// may still cancel.
     expiring: bool,
     radio: Box<dyn RadioJobs>,
+    /// Networking (0.5.0). `NoNet` with Wi-Fi Off, which leaves sleep exactly as in 0.4.2.
+    net: Box<dyn crate::net::Net>,
+    /// When networking was last asked to go quiet, for the capped sleep gate.
+    net_quiet_asked: Millis,
+    /// The Network menu's screens while it is open.
+    net_menu: Option<crate::net_menu::NetMenu>,
+    net_face: Option<TexId>,
+    /// The in-game menu (0.5.0) over a paused game that stays in `Phase::Playing`
+    /// (see `in_game`).
+    in_game: Option<InGame>,
+    /// The last tap of MENU in a game and what the menu showed before it: for the reveal
+    /// delay and for a double tap, which puts that back and opens States.
+    menu_tap: Option<(Millis, Option<InGame>)>,
+    /// States was opened from the in-game menu, so leaving it goes back there.
+    states_from_menu: bool,
+    /// The carousel's Wi-Fi icon: its textures (in `WifiIcon::ALL` order), what it shows,
+    /// and the signal polling while the carousel is on screen (approved 25 Oct 2026).
+    wifi_faces: Option<[TexId; 5]>,
+    wifi_icon: Option<slot_ui::WifiIcon>,
+    wifi_looked: Option<Millis>,
+    signal_asked: Option<Millis>,
+    signal_for: Option<Vec<u8>>,
+    on_carousel: bool,
+    /// The Wi-Fi setting this session started with. Switching it On takes effect after a
+    /// restart (A2), so SlotLink keeps following this until then.
+    wifi_at_boot: bool,
     state_writer: crate::state_writer::StateWriter,
 }
 
@@ -422,6 +454,20 @@ impl App {
         let card_failing = state_writer.card_failing();
         App {
             radio: radio_jobs(),
+            net: Box::new(crate::net::NoNet),
+            net_quiet_asked: 0,
+            net_menu: None,
+            net_face: None,
+            in_game: None,
+            menu_tap: None,
+            states_from_menu: false,
+            wifi_faces: None,
+            wifi_icon: None,
+            wifi_looked: None,
+            signal_asked: None,
+            signal_for: None,
+            on_carousel: false,
+            wifi_at_boot: false,
             state_writer,
             phase: Phase::Shelf,
             shelves,
@@ -480,6 +526,7 @@ impl App {
             link_player: None,
             platform: Platform::default(),
             named_core: false,
+            card_unread: false,
             video_mode: VideoMode::default(),
             link: None,
             sfx: None,
@@ -537,6 +584,7 @@ impl App {
         let mut app = App::new(carts);
         app.root = Some(root.to_path_buf());
         app.state = read_slot_state(root);
+        app.wifi_at_boot = app.state.wifi;
         let titles = app.state.show_titles;
         for (_, shelf) in &mut app.shelves {
             shelf.set_show_titles(titles);
@@ -908,7 +956,15 @@ impl App {
             QuickRow::Rewind => Some(QuickValue::flag(self.state.rewind)),
             QuickRow::Sleep => QuickValue::sleep(self.state.sleep_minutes),
             QuickRow::Titles => Some(QuickValue::flag(self.state.show_titles)),
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => None,
+            QuickRow::Network => Some(QuickValue::flag(self.state.wifi)),
+            QuickRow::DateTime
+            | QuickRow::About
+            | QuickRow::Screen
+            | QuickRow::Game
+            | QuickRow::Resume
+            | QuickRow::States
+            | QuickRow::Settings
+            | QuickRow::ExitGame => None,
         }
     }
 
@@ -958,6 +1014,51 @@ impl App {
 
     pub fn set_bolt_face(&mut self, bolt: TexId) {
         self.bolt = Some(bolt);
+    }
+
+    /// The Wi-Fi icon's textures, in `WifiIcon::ALL` order.
+    pub fn set_wifi_faces(&mut self, faces: [TexId; 5]) {
+        self.wifi_faces = Some(faces);
+    }
+
+    /// What the carousel's Wi-Fi icon shows now (`None`: no icon).
+    pub fn wifi_icon(&self) -> Option<slot_ui::WifiIcon> {
+        self.wifi_icon
+    }
+
+    /// While the carousel is on screen: look at the Wi-Fi state once a second, and ask for
+    /// a signal reading every 30 s, or at once on coming back to the carousel (after a game
+    /// or a wake) or on a new connection when there is no fresh reading. Asking only posts
+    /// to the Wi-Fi thread; nothing here waits. Nothing is asked anywhere else.
+    fn wifi_tick(&mut self) {
+        if !matches!(self.phase, Phase::Shelf) {
+            self.on_carousel = false;
+            self.signal_asked = None;
+            return;
+        }
+        let now = self.now();
+        let back = !std::mem::replace(&mut self.on_carousel, true);
+        if !back
+            && self
+                .wifi_looked
+                .is_some_and(|t| now.saturating_sub(t) < 1_000)
+        {
+            return;
+        }
+        self.wifi_looked = Some(now);
+        let view = crate::net::wifi_view(self.net.as_ref(), std::time::Instant::now());
+        self.wifi_icon = view.icon;
+        if view.connected != self.signal_for {
+            self.signal_for = view.connected.clone();
+            self.signal_asked = None;
+        }
+        let may_ask = self
+            .signal_asked
+            .is_none_or(|t| now.saturating_sub(t) >= crate::net::SIGNAL_POLL_MS);
+        if view.poll_due && may_ask {
+            self.net.poll_signal();
+            self.signal_asked = Some(now);
+        }
     }
 
     pub fn set_shelf_platform_face(&mut self, face: TexId, w: u32) {
@@ -1170,6 +1271,14 @@ impl App {
 
     pub fn set_platform(&mut self, platform: Platform) {
         self.platform = platform;
+    }
+
+    /// The card failed to read this game's save or resume. Neither is written until the cart
+    /// goes in again, the resume is not the core's to refuse and is left where it is rather
+    /// than filed away, and the card alarm stays up meanwhile. Unlike a failed write, no later
+    /// successful write clears it.
+    pub fn set_card_unread(&mut self, unread: bool) {
+        self.card_unread = unread;
     }
 
     pub fn set_named_core(&mut self, named: bool) {
@@ -1445,6 +1554,7 @@ impl App {
 
     pub fn restart(&mut self) {
         self.settle_saves();
+        self.net.before_poweroff();
         if let Some(power) = &mut self.power {
             power.restart();
         }
@@ -1556,6 +1666,7 @@ impl App {
 
     pub fn poweroff(&mut self) {
         self.settle_saves();
+        self.net.before_poweroff();
         if let Some(power) = &mut self.power {
             power.poweroff();
         }
@@ -1632,6 +1743,13 @@ impl App {
         if self.game_menu.is_some() {
             return self.game_menu_input(action);
         }
+        // The in-game menu takes every press over its paused game except a held MENU, which
+        // ejects from anywhere, as it always has.
+        if let Some(menu) = self.in_game() {
+            if action != Action::Eject {
+                return self.in_game_input(menu, action);
+            }
+        }
         let now = self.now();
         match self.phase {
             Phase::Shelf => match action {
@@ -1670,7 +1788,9 @@ impl App {
                 }
                 Action::Eject => self.eject(),
                 Action::GameMenu => self.game_menu_shortcut(),
-                Action::Polaroids => self.open_polaroids(),
+                Action::QuickMenu => self.tap_in_game_menu(),
+                // A double tap: the first tap may have opened or closed the in-game menu.
+                Action::Polaroids => self.double_tap_states(),
                 Action::SaveState => self.save_state(),
                 Action::LoadState => self.load_newest(),
                 Action::RewindStart if !self.may_rewind() => self.refuse(),
@@ -1705,8 +1825,95 @@ impl App {
                 }
             }
             Phase::QuickMenu { row } => self.quick_menu_input(row, action),
+            Phase::Network => self.net_menu_input(action),
             _ => {}
         }
+    }
+
+    fn net_menu_input(&mut self, action: Action) {
+        use crate::net_menu::Effect;
+        let Some(menu) = &mut self.net_menu else {
+            return self.leave_net_menu();
+        };
+        match menu.input(
+            action,
+            self.net.as_mut(),
+            self.state.wifi,
+            self.state.syncthing,
+        ) {
+            Effect::None => {}
+            Effect::Close => self.leave_net_menu(),
+            Effect::SetWifi(on) => {
+                eprintln!(
+                    "slot: wifi: set {} ({})",
+                    if on { "on" } else { "off" },
+                    if on { "after a restart" } else { "now" }
+                );
+                self.state.wifi = on;
+                if !on {
+                    self.wifi_at_boot = false;
+                }
+                self.persist();
+            }
+            Effect::SetSync(on) => {
+                eprintln!("slot: sync: set {}", if on { "on" } else { "off" });
+                self.state.syncthing = on;
+                self.persist();
+            }
+            Effect::Restart => {
+                // From a game (the in-game menu), the game is saved first, and a game that
+                // cannot be saved is never restarted (approved D4).
+                if self.in_game_open() && !self.flush_resume() {
+                    eprintln!("slot: wifi: restart refused: the game could not be saved");
+                    if let Some(menu) = &mut self.net_menu {
+                        menu.restart_not_saved();
+                    }
+                    return;
+                }
+                self.net_menu = None;
+                self.restarting = true;
+                self.act_at = self.now() + SHUTDOWN_SHOW_MS;
+                self.set_led(LedState::Off);
+            }
+        }
+    }
+
+    /// Back from the Network menu to its row: in Settings on the carousel, or in the
+    /// in-game Settings.
+    fn leave_net_menu(&mut self) {
+        self.net_menu = None;
+        if self.in_game_open() {
+            self.in_game = Some(InGame::Row(QuickRow::Network));
+        } else {
+            self.phase = Phase::QuickMenu {
+                row: QuickRow::Network,
+            };
+        }
+    }
+
+    /// What the Network screen shows, while it is open (on the carousel or in a game).
+    pub fn net_view(&self) -> Option<slot_ui::NetView> {
+        let open = matches!(self.phase, Phase::Network) || self.in_game() == Some(InGame::Network);
+        match &self.net_menu {
+            Some(m) if open => {
+                Some(m.view(self.net.as_ref(), self.state.wifi, self.state.syncthing))
+            }
+            _ => None,
+        }
+    }
+
+    /// The Network menu's screens are held (open, or waiting under a lid close).
+    pub fn net_menu_open(&self) -> bool {
+        self.net_menu.is_some()
+    }
+
+    /// About is on screen, on the carousel or in a game.
+    pub fn about_open(&self) -> bool {
+        matches!(self.phase, Phase::About) || self.in_game() == Some(InGame::About)
+    }
+
+    pub fn set_net_face(&mut self, face: TexId) {
+        self.net_face = Some(face);
     }
 
     fn open_quick_menu(&mut self) {
@@ -1740,6 +1947,11 @@ impl App {
                 self.phase = clock_screen(self.utc_secs(), self.state.utc_offset_min, true);
             }
             QuickRow::About => self.phase = Phase::About,
+            QuickRow::Network => {
+                self.net_menu = Some(crate::net_menu::NetMenu::new());
+                self.net.sync_menu_opened();
+                self.phase = Phase::Network;
+            }
             QuickRow::Screen | QuickRow::Game => {
                 if let Some(row) = row.child() {
                     self.phase = Phase::QuickMenu { row };
@@ -1757,6 +1969,8 @@ impl App {
             | QuickRow::Sleep
             | QuickRow::Titles
             | QuickRow::Rumble => {}
+            // The in-game menu's rows are never on the carousel's pages.
+            QuickRow::Resume | QuickRow::States | QuickRow::Settings | QuickRow::ExitGame => {}
         }
     }
 
@@ -1808,7 +2022,15 @@ impl App {
                 }
                 s.sleep_minutes = to;
             }
-            QuickRow::DateTime | QuickRow::About | QuickRow::Screen | QuickRow::Game => return,
+            QuickRow::DateTime
+            | QuickRow::About
+            | QuickRow::Screen
+            | QuickRow::Game
+            | QuickRow::Network
+            | QuickRow::Resume
+            | QuickRow::States
+            | QuickRow::Settings
+            | QuickRow::ExitGame => return,
         }
         self.persist();
     }
@@ -1865,6 +2087,21 @@ impl App {
     fn adjust(&mut self, action: Action) -> bool {
         if action == Action::MuteToggle {
             self.mute_toggle();
+            return true;
+        }
+        // The play chords do nothing behind the in-game menu (its rows change these instead);
+        // brightness, blue light and volume still work everywhere.
+        if self.in_game_open()
+            && matches!(
+                action,
+                Action::ShaderNext
+                    | Action::ShaderPrev
+                    | Action::PaletteNext
+                    | Action::PalettePrev
+                    | Action::FfSoundToggle
+                    | Action::ColourCorrectionToggle
+            )
+        {
             return true;
         }
         if let Action::ShaderNext | Action::ShaderPrev = action {
@@ -2225,7 +2462,15 @@ impl App {
     }
 
     fn timers(&mut self) {
+        self.tidy_in_game();
         self.play_hold();
+        if self.no_game_seated() {
+            self.net.idle_moment();
+        }
+        if let Some(m) = &mut self.net_menu {
+            m.tick(self.net.as_ref(), self.clock as u64);
+        }
+        self.wifi_tick();
         let offer = self.undo_label();
         if let Some(p) = &mut self.polaroids {
             p.set_undo(offer);
@@ -2240,12 +2485,14 @@ impl App {
             self.card_check_at = self.now() + CARD_CHECK_MS;
             self.card_read_only = self.power.as_ref().is_some_and(|p| p.card_read_only());
         }
-        let failing = self.card_failing.load(Ordering::Relaxed) || self.card_read_only;
+        let failing =
+            self.card_failing.load(Ordering::Relaxed) || self.card_read_only || self.card_unread;
         if failing != self.hud.alarmed() {
             eprintln!(
-                "slot: card: alarm {} (read-only {})",
+                "slot: card: alarm {} (read-only {}, unread {})",
                 if failing { "on" } else { "off" },
-                self.card_read_only
+                self.card_read_only,
+                self.card_unread
             );
         }
         self.hud.set_alarm(failing, self.now());
@@ -2370,7 +2617,7 @@ impl App {
         let Some(snapshot) = &self.snapshot else {
             return;
         };
-        if snapshot.resume_trusted() {
+        if snapshot.resume_trusted() || self.card_unread {
             return;
         }
         if !self.named_core {
@@ -2483,6 +2730,7 @@ impl App {
                 values: QuickRow::ALL.map(|r| self.quick_value(r)),
                 clock: self.quick_clock_faces,
                 faces: self.quick_menu_faces.as_ref(),
+                hidden: &[],
             }
             .draw(out),
             Phase::Shelf => {
@@ -2507,9 +2755,18 @@ impl App {
                     self.shelf_clock,
                     out,
                 );
+                let face = self
+                    .wifi_icon
+                    .zip(self.wifi_faces)
+                    .map(|(i, f)| f[i.index()]);
+                slot_ui::draw_wifi_icon(self.shelf_clock, face, out);
             }
             Phase::About => {
                 draw_about(self.about_face, out);
+                return;
+            }
+            Phase::Network => {
+                draw_about(self.net_face, out);
                 return;
             }
             Phase::Inserting { cart, resumed, .. } => {
@@ -2527,7 +2784,10 @@ impl App {
                 self.chrome(cart, self.seat(), out);
             }
             Phase::Playing { cart } if self.screen < 1.0 => self.chrome(cart, 0.0, out),
-            Phase::Playing { .. } => self.push_game(out),
+            Phase::Playing { .. } => match self.in_game_shown() {
+                Some(menu) => self.draw_in_game(menu, out),
+                None => self.push_game(out),
+            },
             Phase::Polaroids { .. } => {
                 self.push_game(out);
                 if let Some(p) = &self.polaroids {
@@ -2921,6 +3181,15 @@ impl App {
         matches!(self.phase, Phase::Shelf)
     }
 
+    /// The carousel or its menus, with no game seated: the only time the clock may be
+    /// corrected from network time (requirement 22).
+    pub fn no_game_seated(&self) -> bool {
+        matches!(
+            self.phase,
+            Phase::Shelf | Phase::QuickMenu { .. } | Phase::About | Phase::Network
+        )
+    }
+
     fn insert(&mut self, clean: bool) {
         if !self.on_shelf() {
             return;
@@ -2973,6 +3242,10 @@ impl App {
             Phase::Playing { cart } | Phase::Inserting { cart, .. } => std::mem::take(cart),
             _ => return,
         };
+        self.in_game = None;
+        self.menu_tap = None;
+        // An in-game Network screen goes with its game (anything typed is wiped).
+        self.net_menu = None;
         self.end_link();
         self.close_game_menu();
         self.flush_eject(&cart);
@@ -3025,6 +3298,10 @@ impl App {
         if matches!(self.phase, Phase::Doze { .. }) {
             return;
         }
+        // Closing the lid leaves the Network menu (anything typed is wiped). An in-game menu
+        // stays, to wake on (approved D3).
+        self.in_game_before_doze();
+        self.net_menu = None;
         self.state_writer.flush();
         let saved = self.flush_resume() || self.flush_resume();
         let cart = match &mut self.phase {
@@ -3043,6 +3320,8 @@ impl App {
         if !saved {
             eprintln!("slot: sleep: the game could not be saved at lid close; no automatic shutdown until it is");
         }
+        // Only now, with the game saved, does networking go quiet (requirement 6).
+        self.ask_net_quiet();
         self.ask_radio(RadioJob::Cool);
         if let Some(power) = &mut self.power {
             power.on_close();
@@ -3060,6 +3339,35 @@ impl App {
         if let Some(power) = &mut self.power {
             power.on_open();
         }
+        // Only a wake with the lid open reconnects (requirement 5).
+        if !self.lid_shut {
+            self.net.lid_opened();
+        }
+    }
+
+    /// Asks networking to go quiet before a suspend (`wlan0` down in Wi-Fi On), and starts
+    /// the sleep gate's cap from now.
+    fn ask_net_quiet(&mut self) {
+        self.net_quiet_asked = self.now();
+        self.net.go_quiet();
+    }
+
+    /// The sleep gate (requirement 4): open once networking is quiet, or once the cap has
+    /// passed, so networking can never hold up a suspend. Always open with Wi-Fi Off.
+    fn net_gate_open(&self) -> bool {
+        self.net.is_quiet()
+            || self.now()
+                >= self
+                    .net_quiet_asked
+                    .saturating_add(crate::net::QUIET_CAP_MS)
+    }
+
+    pub fn set_net(&mut self, net: Box<dyn crate::net::Net>) {
+        self.net = net;
+    }
+
+    pub fn net(&self) -> &dyn crate::net::Net {
+        self.net.as_ref()
     }
 
     pub fn on_doze_timeout(&mut self) {
@@ -3093,6 +3401,7 @@ impl App {
             && !self.shutting_down()
             && !self.link_active()
             && self.now() >= self.sleep.next_try
+            && self.net_gate_open()
             && self.power.as_ref().is_some_and(|p| p.sleep_ready())
     }
 
@@ -3120,6 +3429,16 @@ impl App {
             return self.expire(uptime);
         }
         let secs = left.ceil().min(f64::from(u32::MAX)) as u32;
+        if !self.net.is_quiet() {
+            // Only the cap can open the gate without quiet (O1). Never treated as a normal
+            // sleep: the line is marked for the validation summaries.
+            eprintln!(
+                "slot: sleep: networking not quiet after {} ms; suspending anyway \
+                 (VALIDATION CONCERN: sleep-gate cap of {} ms reached, Wi-Fi not confirmed down)",
+                self.now().saturating_sub(self.net_quiet_asked),
+                crate::net::QUIET_CAP_MS
+            );
+        }
         eprintln!(
             "slot: sleep: suspending for up to {secs}s (battery {})",
             battery.map_or("unknown".to_string(), |b| format!("{}%", b.percent))
@@ -3157,7 +3476,9 @@ impl App {
                 self.wake();
             }
             Verdict::Expire => self.expire(uptime),
-            Verdict::SleepAgain | Verdict::Retry => {}
+            // Before every suspend, not just the first (Decision, 21 Oct): the next try is at
+            // least REST_AFTER_WAKE_MS away, well past the gate's cap.
+            Verdict::SleepAgain | Verdict::Retry => self.ask_net_quiet(),
             Verdict::Fallback => self.fall_back("hardware sleep gave up for this doze"),
         }
     }
@@ -3166,6 +3487,8 @@ impl App {
     fn expire(&mut self, uptime: f64) {
         if self.sleep.unsaved && !self.retry_unsaved() {
             self.sleep.postpone(self.now(), uptime);
+            // Another suspend follows: quiet again first, as for every suspend.
+            self.ask_net_quiet();
             return;
         }
         eprintln!("slot: sleep: the sleep duration is up, shutting down");
@@ -3193,7 +3516,8 @@ impl App {
     }
 
     fn ask_radio(&mut self, job: RadioJob) {
-        if self.state.wifi {
+        // SlotLink's radio follows the setting this session started with (A2).
+        if self.state.wifi && self.wifi_at_boot {
             self.radio.ask(job);
         }
     }
@@ -3300,8 +3624,9 @@ impl App {
         if self.link_active() {
             return self.refuse();
         }
-        if !self.state.wifi {
-            // SlotLink runs over Wi-Fi, which is off unless `wifi=on` is set.
+        if !(self.state.wifi && self.wifi_at_boot) {
+            // SlotLink runs over Wi-Fi, which is off unless Wi-Fi was On when this session
+            // started (switching it On takes effect after a restart).
             self.hud.toast(Toast::LinkOff, self.now());
             return;
         }
@@ -3426,6 +3751,11 @@ impl App {
         if let Some(mut old) = self.starting.replace(LinkStarting { starter, client_id }) {
             old.starter.cancel();
         }
+        // A link (here, one a peer started) runs the game; no menu may hold it.
+        if self.in_game.take() == Some(InGame::Network) {
+            self.net_menu = None;
+        }
+        self.menu_tap = None;
         self.game_menu = Some(GameMenu::Working {
             role: LinkRow::from_client_id(client_id),
             step: LinkStep::Radio,
@@ -3819,6 +4149,7 @@ impl App {
         let cart = std::mem::take(cart);
         self.polaroids = None;
         self.phase = Phase::Playing { cart };
+        self.back_from_states();
     }
 
     fn load_selected(&mut self) {
@@ -3829,6 +4160,8 @@ impl App {
             .map(|e| e.state.clone());
         let refused = state.map(|state| self.load_file(&state)) == Some(false);
         if !refused {
+            // A loaded state goes straight back into the game, even from the in-game menu.
+            self.states_from_menu = false;
             self.close_polaroids();
         }
     }

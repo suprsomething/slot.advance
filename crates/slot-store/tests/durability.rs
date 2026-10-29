@@ -204,6 +204,7 @@ fn a_card_from_before_the_settings_keeps_all_its_values() {
             last_category: slot_store::Category::All,
             sleep_minutes: slot_store::SLEEP_MINUTES_DEFAULT,
             wifi: false,
+            syncthing: false,
             show_titles: false,
         }
     );
@@ -414,6 +415,7 @@ fn sleep_and_wifi_round_trip_and_an_older_file_gets_the_defaults() {
         clock_set: true,
         sleep_minutes: 120,
         wifi: true,
+        syncthing: true,
         ..SlotState::default()
     };
     write_slot_state(d.path(), &s).unwrap();
@@ -422,16 +424,22 @@ fn sleep_and_wifi_round_trip_and_an_older_file_gets_the_defaults() {
     let text = std::fs::read_to_string(&path).unwrap();
     assert!(text.lines().any(|l| l == "sleep_minutes=120"), "{text}");
     assert!(text.lines().any(|l| l == "wifi=on"), "{text}");
+    assert!(text.lines().any(|l| l == "syncthing=on"), "{text}");
 
     let older: String = text
         .lines()
-        .filter(|l| !l.starts_with("sleep_minutes=") && !l.starts_with("wifi="))
+        .filter(|l| {
+            !l.starts_with("sleep_minutes=")
+                && !l.starts_with("wifi=")
+                && !l.starts_with("syncthing=")
+        })
         .map(|l| format!("{l}\n"))
         .collect();
     std::fs::write(&path, older).unwrap();
     let read = read_slot_state(d.path());
     assert_eq!(read.sleep_minutes, slot_store::SLEEP_MINUTES_DEFAULT);
     assert!(!read.wifi, "Wi-Fi must default to off");
+    assert!(!read.syncthing, "Syncthing must default to off");
     assert!(read.clock_set, "the rest of an older file still loads");
 }
 

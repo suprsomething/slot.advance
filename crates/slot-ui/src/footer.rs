@@ -5,8 +5,8 @@ use crate::battery::{draw_gauge, GAUGE_H};
 use crate::plate::HINT_H;
 use crate::slot_chrome::MOUTH_H;
 
-const FOOTER_Y: f32 = OUT_H as f32 - MOUTH_H + (MOUTH_H - HINT_H as f32) / 2.0;
-const FOOTER_MARGIN: f32 = 24.0;
+pub(crate) const FOOTER_Y: f32 = OUT_H as f32 - MOUTH_H + (MOUTH_H - HINT_H as f32) / 2.0;
+pub(crate) const FOOTER_MARGIN: f32 = 24.0;
 
 #[derive(Copy, Clone, Default, PartialEq, Eq, Debug)]
 pub struct Printed {

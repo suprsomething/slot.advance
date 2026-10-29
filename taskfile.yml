@@ -282,9 +282,16 @@ tasks:
       - file target-device/device/examples/core_bench | grep -q aarch64
       - 'echo "built target-device/device/examples/core_bench, adb push it to /tmp/core_bench"'
 
+  syncthing:device:
+    desc: Fetch the pinned Syncthing 2.1.6 (linux-arm64) into vendor/syncthing, checked by SHA-256
+    status:
+      - sh scripts/syncthing.sh check vendor/syncthing/syncthing
+    cmds:
+      - sh scripts/syncthing.sh fetch vendor/syncthing
+
   dist:device:
     desc: Build the SD2 tree for an H700 device, OUT defaults to ./dist-device
-    deps: [core:device, core:gpsp, build:device]
+    deps: [core:device, core:gpsp, build:device, syncthing:device]
     vars:
       OUT: '{{.OUT | default "dist-device"}}'
     cmds:
@@ -299,6 +306,12 @@ tasks:
       - cp vendor/mgba_libretro.so {{.OUT}}/System/
       - cp vendor/gpsp_libretro.so {{.OUT}}/System/
       - cp -r licenses {{.OUT}}/System/licenses
+      - sh scripts/syncthing.sh check vendor/syncthing/syncthing
+      - cp vendor/syncthing/syncthing {{.OUT}}/System/syncthing
+      - chmod 755 {{.OUT}}/System/syncthing
+      - cp vendor/syncthing/LICENSE.txt {{.OUT}}/System/licenses/syncthing-LICENSE.txt
+      - cp vendor/syncthing/AUTHORS.txt {{.OUT}}/System/licenses/syncthing-AUTHORS.txt
+      - cp vendor/syncthing/syncthing.txt {{.OUT}}/System/licenses/syncthing.txt
       - |
         set -euo pipefail
         sha="$(cat vendor/gpsp-src.sha)"
