@@ -62,9 +62,9 @@ The contents of `dist-device` are what a release ZIP holds. To try a build, copy
 
 Releases are built by [`.github/workflows/release.yml`](../.github/workflows/release.yml), on GitHub's arm64 Linux runners in a `rust:1-bullseye` container:
 
-1. It names the build from the tag: `advance-0.4.2` becomes `slot.advance-0.4.2-rg-sp`.
+1. It names the build from the tag: `advance-0.5.0` becomes `slot.advance-0.5.0-rg-sp`.
 2. It installs zip, cmake and Task, then runs `task dist:device`.
-3. It checks that the program and both cores are aarch64 builds, and that the cores' licences, patches and gpSP's source are in place, before anything is packaged.
+3. It checks that the program, both cores and Syncthing are aarch64 builds, that Syncthing is the pinned version (by SHA-256), and that the licences, patches and gpSP's source are in place, before anything is packaged.
 4. It zips the tree, and a second job publishes the GitHub release, using `documentation/releases/<tag>.md` as the release notes when that file exists.
 
 How versions and tags are numbered is in the [release notes](release-notes.md#version-numbers).

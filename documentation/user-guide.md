@@ -552,7 +552,7 @@ Releases before 0.5.0 have no Wi-Fi menu or Syncthing. Going back to one leaves 
 
 ## Differences from slot
 
-This compares slot.advance 0.5.0 with **slot 1.11.0** (28 October 2026), upstream's latest release when 0.5.0 was prepared. slot.advance 0.5.0's fixes from upstream were checked against 1.10.0; 1.11.0 changed none of the rows below.
+This compares slot.advance 0.5.0 with **slot 1.11.0** (released 28 October 2026), upstream's latest release when this comparison was checked on 29 October 2026. Later upstream releases aren't reflected here. slot.advance 0.5.0's fixes from upstream were checked against 1.10.0; 1.11.0 changed none of the rows below.
 
 **Why choose slot.advance:** you play GBA games on an RG SP (2026) and want real hardware sleep: close the lid and the game waits in memory for hours, opening it carries straight on, and a timed shutdown keeps the game safe. Wi-Fi stays off unless you want it, and Syncthing is built in for your saves and states. **Why choose slot:** you want its themes, wallpapers and bezels, remappable controls, screenshots or frame blending, or you have a different Anbernic handheld.
 

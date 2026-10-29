@@ -20,12 +20,14 @@ Everything here applies to the **Anbernic RG SP (2026)** (720 x 480 screen) runn
 
 ## Summary
 
-These are the historical measurements behind hardware sleep, made from 0.3.0 to 0.4.1 with Wi-Fi off or, in the development runs, with it on and unconfigured. The 0.5.0 Wi-Fi On and Syncthing measurements are [in their own section](#050-wi-fi-and-syncthing).
+**On 0.5.0:** two 8-hour sleeps on a 0.5.0 test build both read **2% an hour** on the battery gauge, one with Wi-Fi off (77% to 61%) and one with Wi-Fi on (80% to 64%). They are single runs on different nights, so they don't show identical standby use with Wi-Fi off and on in every situation. They, and the 0.5.0 development measurements, are [in their own section](#050-wi-fi-and-syncthing).
+
+The table below is the historical evidence behind hardware sleep, made from 0.3.0 to 0.4.1 with Wi-Fi off or, in the development runs, with the radio left on and unconfigured.
 
 | Lid closed | Observed battery drop | Estimated current | Source |
 |---|---|---|---|
 | 0.3.0 (semi-stock), software standby, modified build held awake | 61% to 47% in 2 hours (~7% an hour) | ~250 mA (248 to 253) | Test B |
-| First suspend-to-RAM test, USB and Wi-Fi on | 68% to 62% in 2 hours (~3% an hour) | ~105 mA (87.5 to 122.5) | Test A |
+| First suspend-to-RAM test, USB and Wi-Fi radio left on | 68% to 62% in 2 hours (~3% an hour) | ~105 mA (87.5 to 122.5) | Test A |
 | 0.4.0-beta.3, USB and Wi-Fi off | 98% to 82% in 8 hours (~2% an hour) | Not converted (above 80%; see below) | Overnight sleep, tester's notes |
 | 0.4.0, USB and Wi-Fi off | 94% to 74% in 7 h 46 min (~2.6% an hour) | Not converted (above 80%; see below) | Overnight sleep, night A log |
 | 0.4.1-beta.1, USB and Wi-Fi off | 99% to 75% in 7 h 37 min (~3.2% an hour) | Not converted (above 80%; see below) | Extended sleep, night B log |
@@ -95,7 +97,7 @@ Experiment 5 compared the same hardware with lid wake armed (Normal Standby, seg
 ## Waking up faster in 0.4.1
 
 <p align="center">
-<img src="../.github/resources/wake/wake-first-frame.svg" width="100%" alt="Waking from sleep with Wi-Fi off, median time from the kernel's first logged resume marker to the game's first rendered frame: 1.25 s on 0.4.0 (10 wakes, 1236 to 1270 ms) and 0.81 s on 0.4.1, timed as 0.4.1-beta.1 (11 wakes, 803 to 828 ms), 443 ms sooner, 35% less measured time. With wifi=on both take about 0.82 s">
+<img src="../.github/resources/wake/wake-first-frame.svg" width="100%" alt="Waking from sleep with Wi-Fi off, median time from the kernel's first logged resume marker to the game's first rendered frame: 1.25 s on 0.4.0 (10 wakes, 1236 to 1270 ms) and 0.81 s on 0.4.1, timed as 0.4.1-beta.1 (11 wakes, 803 to 828 ms), 443 ms sooner, 35% less measured time. With 0.4.x's hidden wifi=on setting both took about 0.82 s, a different setting from 0.5.0's Wi-Fi On">
 </p>
 
 | Wi-Fi off (the default) | 0.4.0 | 0.4.1-beta.1 |
@@ -111,7 +113,7 @@ Experiment 5 compared the same hardware with lid wake armed (Normal Standby, seg
 
 **What 0.4.1 changes** (`crates/slot-power/src/quiet.rs`). Once, at start-up, straight after a successful driver unload with the radio confirmed unpowered, slot.advance writes `1` to `rf-ctrl/scan_device`, the same step BaseOS's own start-up script uses to discard a stale card before loading the driver. The card goes within about 15 ms, and later resumes have nothing to wait for. Before writing, it checks that the slot holds only the Wi-Fi card (never either TF card) and that the radio's power rail is off; if any check fails, it changes nothing and resumes exactly as 0.4.0 did. Each outcome is written to `slot.log`, for example `slot: quiet: stale wifi card mmc2:0001 discarded in 15 ms`. The full list of checks and outcomes is in the [Technical reference](technical.md#the-041-wi-fi-card-removal).
 
-**What it doesn't change.** It isn't a new way of sleeping: the suspend itself, the lid and timer wakes, and the radio's power state are exactly as in 0.4.0. With `wifi=on` the driver stays loaded and nothing is removed, so those wakes take about 0.82 s on both versions, the driver resuming the radio instead: a median of 820 ms over 9 wakes on 0.4.0, and 825 ms on 0.4.1-beta.1. On the candidate, 10 `wifi=on` wakes all resumed, but the watcher timed only 7 of them (the V1 report explains the three it missed), so the 825 ms median is of those 7. No improvement is claimed with `wifi=on`; the 35% applies to the Wi-Fi-off configuration only.
+**What it doesn't change.** It isn't a new way of sleeping: the suspend itself, the lid and timer wakes, and the radio's power state are exactly as in 0.4.0. With 0.4.x's hidden `wifi=on` setting (not 0.5.0's Wi-Fi On, which takes Wi-Fi down before sleeping) the driver stays loaded and nothing is removed, so those wakes take about 0.82 s on both versions, the driver resuming the radio instead: a median of 820 ms over 9 wakes on 0.4.0, and 825 ms on 0.4.1-beta.1. On the candidate, 10 `wifi=on` wakes all resumed, but the watcher timed only 7 of them (the V1 report explains the three it missed), so the 825 ms median is of those 7. No improvement is claimed with `wifi=on`; the 35% applies to the Wi-Fi-off configuration only.
 
 **Start-up race (accepted limitation).** If the lid closes at almost exactly the moment the driver is being unloaded, about 20 seconds after power-on, the kernel holds the removal back while it suspends and doesn't repeat it afterwards. That session's wakes then take as long as in 0.4.0; sleep and wake still work normally, and the next power-on removes the card as usual. `slot.log` reports it as `stale wifi card discard FAILED`. Targeted testing (V2), with lid closes deliberately aimed at that window, reproduced it once; it was accepted rather than adding a retry to the suspend path.
 
@@ -119,15 +121,15 @@ Experiment 5 compared the same hardware with lid wake armed (Normal Standby, seg
 
 ## Battery results
 
-### Observed battery per hour (0.4.x, Wi-Fi off)
+### Observed battery per hour
 
 <p align="center">
-<img src="../.github/resources/battery/battery-rate-comparison.svg" width="100%" alt="Battery used per hour asleep, as observed, one point per run with whiskers for whole-percent readings: 0.3.0 (semi-stock) software standby, a modified build held in standby for 2 hours (Test B), about 7% an hour (6.5 to 7.5); 0.4.x hardware sleep with Wi-Fi Off, three separate extended sleeps: 0.4.0-beta.3 2.0% an hour (1.9 to 2.1), 0.4.0 2.6% (2.4 to 2.7) and 0.4.1-beta.1 3.2% (3.0 to 3.3), an observed range of about 2 to 3.2% an hour">
+<img src="../.github/resources/battery/battery-rate-comparison.svg" width="100%" alt="Battery used per hour asleep, as observed, one point per run with whiskers for whole-percent readings: 0.3.0 (semi-stock) software standby, a modified build held in standby for 2 hours (Test B), about 7% an hour (6.5 to 7.5); 0.4.x hardware sleep with Wi-Fi Off, three separate extended sleeps: 0.4.0-beta.3 2.0% an hour (1.9 to 2.1), 0.4.0 2.6% (2.4 to 2.7) and 0.4.1-beta.1 3.2% (3.0 to 3.3), an observed range of about 2 to 3.2% an hour; 0.5.0 hardware sleep on 0.5.0 test build 1, one 8-hour sleep each: Wi-Fi Off 2.0% an hour (1.9 to 2.1) and Wi-Fi On 2.0% an hour (1.9 to 2.1)">
 </p>
 
-<sub>One point per run. Whiskers show the rates consistent with whole-percent start and end readings, one point either way over the time asleep. Ordinary 0.3.0 shuts down 3 minutes after the lid closes; its point comes from a modified build held in standby for 2 hours (Test B), not extended to longer sleeps. The three 0.4.x points are separate sleeps on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1, started at different charge levels; they are not one discharge, and the range is pooled across 0.4.x rather than measured on any one version. Details are under [the overnight sleeps](#methodology-and-uncertainty).</sub>
+<sub>One point per run. Whiskers show the rates consistent with whole-percent start and end readings, one point either way over the time asleep. Ordinary 0.3.0 shuts down 3 minutes after the lid closes; its point comes from a modified build held in standby for 2 hours (Test B), not extended to longer sleeps. The three 0.4.x points are separate sleeps on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1, started at different charge levels; they are not one discharge, and the range is pooled across 0.4.x rather than measured on any one version. The two 0.5.0 points are single 8-hour sleeps on a 0.5.0 test build (V1-B and V1-D), described in [0.5.0: Wi-Fi and Syncthing](#050-wi-fi-and-syncthing); they read the same, which does not show identical standby current with Wi-Fi off and on. Details of the 0.4.x sleeps are under [the overnight sleeps](#methodology-and-uncertainty).</sub>
 
-The battery percentage per hour is the primary figure here, because it is what the gauge shows and what a player sees. The first suspend-to-RAM test (Test A, ~3% an hour with USB and Wi-Fi still on) and Experiment 5 are development runs, kept in the [summary](#summary) and the [methodology](#methodology-and-uncertainty) rather than in this comparison.
+The battery percentage per hour is the primary figure here, because it is what the gauge shows and what a player sees. The first suspend-to-RAM test (Test A, ~3% an hour with USB and the Wi-Fi radio still on) and Experiment 5 are development runs, kept in the [summary](#summary) and the [methodology](#methodology-and-uncertainty) rather than in this comparison.
 
 ### Sleep-duration projections
 

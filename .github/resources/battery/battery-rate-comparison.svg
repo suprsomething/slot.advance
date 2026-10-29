@@ -1,17 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="560" viewBox="0 0 720 560" role="img" aria-labelledby="t d">
-<title id="t">Battery used per hour asleep, as observed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep</title>
-<desc id="d">Dot plot, one point per run, from battery-gauge readings, with whiskers for the rates consistent with whole-percent readings. 0.3.0 (semi-stock), software standby: a modified build held in standby for 2 hours (Test B), 61% to 47%, 7.0% an hour (6.5 to 7.5); ordinary 0.3.0 shuts down 3 minutes after the lid closes. 0.4.x, hardware sleep, three separate extended sleeps: 0.4.0-beta.3, 98% to 82% in 8 hours, 2.0% an hour (1.9 to 2.1); 0.4.0, 94% to 74% in 7 hours 46 minutes, 2.6% an hour (2.4 to 2.7); 0.4.1-beta.1, 99% to 75% in 7 hours 37 minutes, 3.2% an hour (3.0 to 3.3). Observed range about 2 to 3.2% an hour. Not one discharge, and not a controlled comparison between 0.4.0 and 0.4.1.</desc>
-<rect x="0.5" y="0.5" width="719" height="559" rx="14" fill="#17161D" stroke="#2E2C38"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="718" viewBox="0 0 720 718" role="img" aria-labelledby="t d">
+<title id="t">Battery used per hour asleep, as observed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep, and 2.0% an hour for each of two 0.5.0 sleeps, Wi-Fi Off and Wi-Fi On</title>
+<desc id="d">Dot plot, one point per run, from battery-gauge readings, with whiskers for the rates consistent with whole-percent readings. 0.3.0 (semi-stock), software standby: a modified build held in standby for 2 hours (Test B), 61% to 47%, 7.0% an hour (6.5 to 7.5); ordinary 0.3.0 shuts down 3 minutes after the lid closes. 0.4.x, hardware sleep with Wi-Fi Off, three separate extended sleeps: 0.4.0-beta.3, 98% to 82% in 8 hours, 2.0% an hour (1.9 to 2.1); 0.4.0, 94% to 74% in 7 hours 46 minutes, 2.6% an hour (2.4 to 2.7); 0.4.1-beta.1, 99% to 75% in 7 hours 37 minutes, 3.2% an hour (3.0 to 3.3). Observed range about 2 to 3.2% an hour. 0.5.0 test build 1, one 8-hour sleep each: Wi-Fi Off (V1-B), 77% to 61%, 2.0% an hour (1.9 to 2.1); Wi-Fi On (V1-D), 80% to 64%, 2.0% an hour (1.9 to 2.1). Separate sleeps, not one discharge and not a controlled comparison between releases; the same 0.5.0 reading does not show identical standby current with Wi-Fi Off and On in every situation.</desc>
+<rect x="0.5" y="0.5" width="719" height="717" rx="14" fill="#17161D" stroke="#2E2C38"/>
 <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <text x="32" y="50" font-size="24" fill="#EEECF4" font-weight="650" text-anchor="start">Battery used per hour asleep, as observed</text>
 <text x="32" y="80" font-size="16" fill="#C2BFD0" font-weight="400" text-anchor="start">One point per run, read from the battery gauge</text>
-<text x="280.0" y="360" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">0%</text>
-<text x="380.0" y="360" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">2%</text>
-<text x="480.0" y="360" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">4%</text>
-<text x="580.0" y="360" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">6%</text>
-<text x="680.0" y="360" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">8%</text>
-<line x1="280" y1="338" x2="680" y2="338" stroke="#2E2C38" stroke-width="1"/>
-<text x="480.0" y="384" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="middle">Battery used per hour</text>
 <text x="32" y="136" font-size="18" fill="#EEECF4" font-weight="600">0.3.0 (semi-stock)<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">software standby</tspan></text>
 <line x1="280.0" y1="148" x2="280.0" y2="184" stroke="#2E2C38" stroke-width="1"/>
 <line x1="380.0" y1="148" x2="380.0" y2="184" stroke="#2E2C38" stroke-width="1"/>
@@ -23,7 +16,7 @@
 <circle cx="629.9" cy="166" r="5" fill="#5C596C" stroke="#EEECF4" stroke-width="1.5"/>
 <text x="594.8646397334444" y="171" font-size="15" fill="#EEECF4" font-weight="600" text-anchor="end">~7.0% an hour</text>
 <text x="32" y="226" font-size="18" fill="#EEECF4" font-weight="600">0.4.x<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep, Wi-Fi Off</tspan></text>
-<rect x="380.0" y="238" width="60.0" height="108" rx="4" fill="#8B7CF6" opacity="0.16"/>
+<rect x="380.0" y="238" width="60.0" height="108" rx="4" fill="#6A60A8" opacity="0.16"/>
 <text x="688" y="226" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="end">observed range ~2 to 3.2% an hour</text>
 <line x1="280.0" y1="238" x2="280.0" y2="346" stroke="#2E2C38" stroke-width="1"/>
 <line x1="380.0" y1="238" x2="380.0" y2="346" stroke="#2E2C38" stroke-width="1"/>
@@ -32,20 +25,42 @@
 <line x1="680.0" y1="238" x2="680.0" y2="346" stroke="#2E2C38" stroke-width="1"/>
 <text x="48" y="261" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="start">0.4.0-beta.3, 8 h</text>
 <path d="M373.8 256H386.2M373.8 250V262M386.2 250V262" stroke="#C2BFD0" stroke-width="2" fill="none"/>
-<circle cx="380.0" cy="256" r="5" fill="#8B7CF6" stroke="#EEECF4" stroke-width="1.5"/>
+<circle cx="380.0" cy="256" r="5" fill="#6A60A8" stroke="#EEECF4" stroke-width="1.5"/>
 <text x="396.25" y="261" font-size="15" fill="#EEECF4" font-weight="600" text-anchor="start">2.0%</text>
 <text x="48" y="297" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="start">0.4.0, 7 h 46 min</text>
 <path d="M402.2 292H415.1M402.2 286V298M415.1 286V298" stroke="#C2BFD0" stroke-width="2" fill="none"/>
-<circle cx="408.6" cy="292" r="5" fill="#8B7CF6" stroke="#EEECF4" stroke-width="1.5"/>
+<circle cx="408.6" cy="292" r="5" fill="#6A60A8" stroke="#EEECF4" stroke-width="1.5"/>
 <text x="425.0627076857112" y="297" font-size="15" fill="#EEECF4" font-weight="600" text-anchor="start">2.6%</text>
 <text x="48" y="333" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="start">0.4.1-beta.1, 7 h 37 min</text>
 <path d="M431.0 328H444.1M431.0 322V334M444.1 322V334" stroke="#C2BFD0" stroke-width="2" fill="none"/>
-<circle cx="437.5" cy="328" r="5" fill="#8B7CF6" stroke="#EEECF4" stroke-width="1.5"/>
+<circle cx="437.5" cy="328" r="5" fill="#6A60A8" stroke="#EEECF4" stroke-width="1.5"/>
 <text x="454.1137855579869" y="333" font-size="15" fill="#EEECF4" font-weight="600" text-anchor="start">3.2%</text>
-<text x="32" y="424" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">Whiskers: the rates consistent with whole-percent start and end readings. Ordinary</text>
-<text x="32" y="448" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">0.3.0 shuts down 3 minutes after the lid closes; its point is a modified build held</text>
-<text x="32" y="472" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">in standby for 2 hours. The 0.4.x points are separate sleeps on different versions,</text>
-<text x="32" y="496" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">started at different charge levels: not one discharge, and not a controlled</text>
-<text x="32" y="520" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">comparison between 0.4.0 and 0.4.1.</text>
+<text x="32" y="388" font-size="18" fill="#EEECF4" font-weight="600">0.5.0<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep, 0.5.0 test build 1</tspan></text>
+<line x1="280.0" y1="400" x2="280.0" y2="472" stroke="#2E2C38" stroke-width="1"/>
+<line x1="380.0" y1="400" x2="380.0" y2="472" stroke="#2E2C38" stroke-width="1"/>
+<line x1="480.0" y1="400" x2="480.0" y2="472" stroke="#2E2C38" stroke-width="1"/>
+<line x1="580.0" y1="400" x2="580.0" y2="472" stroke="#2E2C38" stroke-width="1"/>
+<line x1="680.0" y1="400" x2="680.0" y2="472" stroke="#2E2C38" stroke-width="1"/>
+<text x="48" y="423" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="start">Wi-Fi Off, 8 h (V1-B)</text>
+<path d="M373.8 418H386.2M373.8 412V424M386.2 412V424" stroke="#C2BFD0" stroke-width="2" fill="none"/>
+<circle cx="380.0" cy="418" r="5" fill="#8B7CF6" stroke="#EEECF4" stroke-width="1.5"/>
+<text x="396.25" y="423" font-size="15" fill="#EEECF4" font-weight="600" text-anchor="start">2.0%</text>
+<text x="48" y="459" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="start">Wi-Fi On, 8 h (V1-D)</text>
+<path d="M373.8 454H386.3M373.8 448V460M386.3 448V460" stroke="#C2BFD0" stroke-width="2" fill="none"/>
+<circle cx="380.0" cy="454" r="5" fill="#8B7CF6" stroke="#EEECF4" stroke-width="1.5"/>
+<text x="396.2610688613397" y="459" font-size="15" fill="#EEECF4" font-weight="600" text-anchor="start">2.0%</text>
+<text x="280.0" y="502" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">0%</text>
+<text x="380.0" y="502" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">2%</text>
+<text x="480.0" y="502" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">4%</text>
+<text x="580.0" y="502" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">6%</text>
+<text x="680.0" y="502" font-size="14" fill="#A3A0B3" font-weight="400" text-anchor="middle">8%</text>
+<line x1="280" y1="480" x2="680" y2="480" stroke="#2E2C38" stroke-width="1"/>
+<text x="480.0" y="526" font-size="15" fill="#C2BFD0" font-weight="400" text-anchor="middle">Battery used per hour</text>
+<text x="32" y="566" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">Whiskers: the rates consistent with whole-percent start and end readings. Ordinary</text>
+<text x="32" y="590" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">0.3.0 shuts down 3 minutes after the lid closes; its point is a modified build held</text>
+<text x="32" y="614" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">in standby for 2 hours. Every point is a separate sleep, on a different version or</text>
+<text x="32" y="638" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">night and at a different charge level: not one discharge, and not a controlled</text>
+<text x="32" y="662" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">comparison between releases. The two 0.5.0 sleeps read the same 2% an hour; that</text>
+<text x="32" y="686" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">does not show identical standby current with Wi-Fi Off and On in every situation.</text>
 </g>
 </svg>

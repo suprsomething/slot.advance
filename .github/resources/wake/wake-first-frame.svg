@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="466" viewBox="0 0 720 466" role="img" aria-labelledby="t d">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="490" viewBox="0 0 720 490" role="img" aria-labelledby="t d">
 <title id="t">Waking from sleep with Wi-Fi off: median 1.25 s on 0.4.0 and 0.81 s on 0.4.1, 35% less measured resume time</title>
-<desc id="d">Two horizontal bars. Median time from the kernel's first logged resume marker to the game's first rendered frame, with Wi-Fi off: 0.4.0, 1251 ms over 10 wakes (1236 to 1270); 0.4.1, timed as 0.4.1-beta.1 (the same runtime source apart from the version), 808 ms over 11 wakes (803 to 828). 443 ms sooner, 35% less measured time. The unlogged time from the lid starting to open until resume starts is not included, and this is not the kernel's total device-resume time. With wifi=on, both take about 0.82 s, and no improvement is claimed.</desc>
-<rect x="0.5" y="0.5" width="719" height="465" rx="14" fill="#17161D" stroke="#2E2C38"/>
+<desc id="d">Two horizontal bars. Median time from the kernel's first logged resume marker to the game's first rendered frame, with Wi-Fi off: 0.4.0, 1251 ms over 10 wakes (1236 to 1270); 0.4.1, timed as 0.4.1-beta.1 (the same runtime source apart from the version), 808 ms over 11 wakes (803 to 828). 443 ms sooner, 35% less measured time. The unlogged time from the lid starting to open until resume starts is not included, and this is not the kernel's total device-resume time. With 0.4.x's hidden wifi=on setting, both took about 0.82 s, and no improvement is claimed; that is not a measurement of 0.5.0's Wi-Fi On.</desc>
+<rect x="0.5" y="0.5" width="719" height="489" rx="14" fill="#17161D" stroke="#2E2C38"/>
 <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <text x="32" y="50" font-size="24" fill="#EEECF4" font-weight="650" text-anchor="start">Waking from sleep, Wi-Fi off</text>
 <text x="32" y="80" font-size="16" fill="#C2BFD0" font-weight="400" text-anchor="start">Median time from the start of resume to the game's first frame</text>
@@ -23,6 +23,7 @@
 <text x="32" y="362" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">From the kernel's first logged resume marker to the first rendered frame. Excludes</text>
 <text x="32" y="386" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">the unlogged time from the lid starting to open until that marker; not the kernel's</text>
 <text x="32" y="410" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">total device-resume time. 0.4.1 was timed as 0.4.1-beta.1, the same runtime source</text>
-<text x="32" y="434" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">apart from the version. With wifi=on, both take about 0.82 s: no improvement.</text>
+<text x="32" y="434" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">apart from the version. With 0.4.x's hidden wifi=on setting, both took about 0.82 s;</text>
+<text x="32" y="458" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">that was a different setting, not a measurement of 0.5.0's Wi-Fi On.</text>
 </g>
 </svg>

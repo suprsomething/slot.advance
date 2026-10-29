@@ -187,7 +187,7 @@ Everything below was introduced in 0.4.0-beta.1, which was only installed for on
 
 ---
 
-## 0.3.0 (previous release, previously named v3)
+## 0.3.0 (historical release, previously named v3)
 
 Tag `advance-v3`, published 10 October 2026. Download: `slot-advance-v3-rg-sp.zip` (the filename is unchanged).
 

@@ -1,33 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="500" viewBox="0 0 720 500" role="img" aria-labelledby="t d">
-<title id="t">Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi Off</title>
-<desc id="d">Blocks of 1 percent, from observed battery-gauge drops. 0.3.0 (semi-stock), software standby: a modified 0.3.0 test build held in standby went from 61% to 47% in 2 hours, about 7% an hour; ordinary 0.3.0 shuts down 3 minutes after the lid closes. 0.4.x, hardware sleep with Wi-Fi Off: about 2 to 3.2% an hour over three extended sleeps, 98% to 82% in 8 hours on 0.4.0-beta.3, 94% to 74% in 7 hours 46 minutes on 0.4.0 and 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1. Observed gauge readings, not a guaranteed range or a controlled measurement of the improvement between releases.</desc>
-<rect x="0.5" y="0.5" width="719" height="499" rx="14" fill="#17161D" stroke="#2E2C38"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="620" viewBox="0 0 720 620" role="img" aria-labelledby="t d">
+<title id="t">Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi Off, and 2% an hour for 0.5.0 hardware sleep with Wi-Fi Off and with Wi-Fi On</title>
+<desc id="d">Blocks of 1 percent, from observed battery-gauge drops. 0.3.0 (semi-stock), software standby: a modified 0.3.0 test build held in standby went from 61% to 47% in 2 hours, about 7% an hour; ordinary 0.3.0 shuts down 3 minutes after the lid closes. 0.4.x, hardware sleep with Wi-Fi Off: about 2 to 3.2% an hour over three extended sleeps, 98% to 82% in 8 hours on 0.4.0-beta.3, 94% to 74% in 7 hours 46 minutes on 0.4.0 and 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1. 0.5.0, hardware sleep, one 8-hour sleep each on 0.5.0 test build 1: Wi-Fi Off, 77% to 61%, and Wi-Fi On, 80% to 64%, both 2% an hour. Observed gauge readings, not a guaranteed range or one controlled experiment; the same reading with Wi-Fi Off and On does not show identical standby current in every situation.</desc>
+<rect x="0.5" y="0.5" width="719" height="619" rx="14" fill="#17161D" stroke="#2E2C38"/>
 <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <text x="32" y="50" font-size="24" fill="#EEECF4" font-weight="650" text-anchor="start">Battery used per hour, lid closed</text>
 <text x="32" y="80" font-size="16" fill="#C2BFD0" font-weight="400" text-anchor="start">Each block is 1% of the battery, as shown by the battery gauge</text>
-<text x="32" y="142" font-size="18" fill="#EEECF4" font-weight="600">0.3.0 (semi-stock)<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">software standby</tspan></text>
-<rect x="32" y="156" width="46" height="34" rx="4" fill="#5C596C"/>
-<rect x="86" y="156" width="46" height="34" rx="4" fill="#5C596C"/>
-<rect x="140" y="156" width="46" height="34" rx="4" fill="#5C596C"/>
-<rect x="194" y="156" width="46" height="34" rx="4" fill="#5C596C"/>
-<rect x="248" y="156" width="46" height="34" rx="4" fill="#5C596C"/>
-<rect x="302" y="156" width="46" height="34" rx="4" fill="#5C596C"/>
-<rect x="356" y="156" width="46" height="34" rx="4" fill="#5C596C"/>
-<text x="416" y="181" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~7% an hour</text>
-<text x="688" y="142" font-size="15" fill="#A3A0B3" font-weight="400" text-anchor="end">61% to 47% in 2 hours</text>
-<text x="32" y="254" font-size="18" fill="#EEECF4" font-weight="600">0.4.x<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep, Wi-Fi Off</tspan></text>
-<rect x="32" y="268" width="46" height="34" rx="4" fill="#8B7CF6"/>
-<rect x="86" y="268" width="46" height="34" rx="4" fill="#8B7CF6"/>
-<rect x="140.75" y="268.75" width="44.5" height="32.5" rx="4" fill="none" stroke="#8B7CF6" stroke-width="1.5"/>
-<rect x="140" y="268" width="46.0" height="34" rx="4" fill="#8B7CF6" opacity="0.45"/>
-<rect x="194.75" y="268.75" width="44.5" height="32.5" rx="4" fill="none" stroke="#8B7CF6" stroke-width="1.5"/>
-<rect x="194" y="268" width="9.2" height="34" rx="4" fill="#8B7CF6" opacity="0.45"/>
-<text x="254" y="293" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~2 to 3.2% an hour</text>
-<text x="688" y="254" font-size="15" fill="#A3A0B3" font-weight="400" text-anchor="end">16% in 8 h, 20% in 7.8 h, 24% in 7.6 h</text>
-<text x="32" y="372" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">0.3.0 (semi-stock): a modified 0.3.0 test build held in software standby for</text>
-<text x="32" y="396" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">2 hours. Ordinary 0.3.0 shuts down 3 minutes after the lid closes.</text>
-<text x="32" y="420" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">0.4.x (Wi-Fi Off): three extended sleeps, on 0.4.0-beta.3, 0.4.0, 0.4.1-beta.1.</text>
-<text x="32" y="444" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">Observed gauge readings in whole 1% steps: not a guaranteed range, and not a</text>
-<text x="32" y="468" font-size="16" fill="#A3A0B3" font-weight="400" text-anchor="start">controlled measurement of the improvement between releases.</text>
+<text x="32" y="134" font-size="18" fill="#EEECF4" font-weight="600">0.3.0 (semi-stock)<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">software standby</tspan></text>
+<rect x="32" y="146" width="46" height="30" rx="4" fill="#5C596C"/>
+<rect x="86" y="146" width="46" height="30" rx="4" fill="#5C596C"/>
+<rect x="140" y="146" width="46" height="30" rx="4" fill="#5C596C"/>
+<rect x="194" y="146" width="46" height="30" rx="4" fill="#5C596C"/>
+<rect x="248" y="146" width="46" height="30" rx="4" fill="#5C596C"/>
+<rect x="302" y="146" width="46" height="30" rx="4" fill="#5C596C"/>
+<rect x="356" y="146" width="46" height="30" rx="4" fill="#5C596C"/>
+<text x="416" y="168" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~7% an hour</text>
+<text x="688" y="134" font-size="15" fill="#A3A0B3" font-weight="400" text-anchor="end">61% to 47% in 2 h</text>
+<text x="32" y="218" font-size="18" fill="#EEECF4" font-weight="600">0.4.x<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep, Wi-Fi Off</tspan></text>
+<rect x="32" y="230" width="46" height="30" rx="4" fill="#6A60A8"/>
+<rect x="86" y="230" width="46" height="30" rx="4" fill="#6A60A8"/>
+<rect x="140.75" y="230.75" width="44.5" height="28.5" rx="4" fill="none" stroke="#6A60A8" stroke-width="1.5"/>
+<rect x="140" y="230" width="46.0" height="30" rx="4" fill="#6A60A8" opacity="0.45"/>
+<rect x="194.75" y="230.75" width="44.5" height="28.5" rx="4" fill="none" stroke="#6A60A8" stroke-width="1.5"/>
+<rect x="194" y="230" width="9.2" height="30" rx="4" fill="#6A60A8" opacity="0.45"/>
+<text x="254" y="252" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~2 to 3.2% an hour</text>
+<text x="688" y="218" font-size="15" fill="#A3A0B3" font-weight="400" text-anchor="end">three sleeps of 7.6 to 8 h</text>
+<text x="32" y="302" font-size="18" fill="#EEECF4" font-weight="600">0.5.0<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep, Wi-Fi Off</tspan></text>
+<rect x="32" y="314" width="46" height="30" rx="4" fill="#8B7CF6"/>
+<rect x="86" y="314" width="46" height="30" rx="4" fill="#8B7CF6"/>
+<text x="146" y="336" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~2% an hour</text>
+<text x="688" y="302" font-size="15" fill="#A3A0B3" font-weight="400" text-anchor="end">77% to 61% in 8 h</text>
+<text x="32" y="386" font-size="18" fill="#EEECF4" font-weight="600">0.5.0<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">hardware sleep, Wi-Fi On</tspan></text>
+<rect x="32" y="398" width="46" height="30" rx="4" fill="#8B7CF6"/>
+<rect x="86" y="398" width="46" height="30" rx="4" fill="#8B7CF6"/>
+<text x="146" y="420" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~2% an hour</text>
+<text x="688" y="386" font-size="15" fill="#A3A0B3" font-weight="400" text-anchor="end">80% to 64% in 8 h</text>
+<text x="32" y="480" font-size="18" fill="#A3A0B3" font-weight="400" text-anchor="start">Observed gauge readings from separate sleeps, in whole 1% steps:</text>
+<text x="32" y="507" font-size="18" fill="#A3A0B3" font-weight="400" text-anchor="start">not guaranteed battery life or one controlled experiment.</text>
+<text x="32" y="534" font-size="18" fill="#A3A0B3" font-weight="400" text-anchor="start">0.3.0: a modified build held in standby (normally off after 3 min).</text>
+<text x="32" y="561" font-size="18" fill="#A3A0B3" font-weight="400" text-anchor="start">0.5.0: one 8-hour sleep each on a test build. The same reading</text>
+<text x="32" y="588" font-size="18" fill="#A3A0B3" font-weight="400" text-anchor="start">doesn't show identical standby current with Wi-Fi Off and On.</text>
 </g>
 </svg>

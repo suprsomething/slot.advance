@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="566" viewBox="0 0 720 566" role="img" aria-labelledby="t d">
 <title id="t">Estimated lid-closed current draw: about 250 mA for 0.3.0 (semi-stock) software standby, 105 mA for the first suspend-to-RAM test, 70 mA for the 0.4.0 configuration</title>
-<desc id="d">Horizontal bar chart of currents calculated from battery-gauge readings, one run each. 0.3.0 (semi-stock) software standby, a modified build held awake: about 250 mA, bounded 248 to 253 by when each 1% tick fell. First suspend-to-RAM test with USB and Wi-Fi on: about 105 mA, 87.5 to 122.5 from whole-percent gauge resolution. 0.4.0 configuration, from a 1.5-hour run below 80% charge: about 70 mA, 69.6 to 75.4 from the awake current assumed in the correction method (240 to 260 mA). None of the ranges is a confidence interval. The extended sleeps started above 80% charge, where the gauge's step size is not known, so they are not converted to a current. About 72% less than software standby.</desc>
+<desc id="d">Horizontal bar chart of currents calculated from battery-gauge readings, one run each. 0.3.0 (semi-stock) software standby, a modified build held awake: about 250 mA, bounded 248 to 253 by when each 1% tick fell. First suspend-to-RAM test (October 2026 development, before 0.4.0) with USB and the Wi-Fi radio left powered: about 105 mA, 87.5 to 122.5 from whole-percent gauge resolution. 0.4.0 configuration, from a 1.5-hour run below 80% charge: about 70 mA, 69.6 to 75.4 from the awake current assumed in the correction method (240 to 260 mA). None of the ranges is a confidence interval. The extended sleeps started above 80% charge, where the gauge's step size is not known, so they are not converted to a current. About 72% less than software standby.</desc>
 <rect x="0.5" y="0.5" width="719" height="565" rx="14" fill="#17161D" stroke="#2E2C38"/>
 <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
 <text x="32" y="50" font-size="24" fill="#EEECF4" font-weight="650" text-anchor="start">Estimated lid-closed current draw</text>
@@ -15,12 +15,12 @@
 <rect x="32" y="146" width="507.1" height="30" rx="4" fill="#5C596C"/>
 <path d="M535.1 161H545.2M535.1 154V168M545.2 154V168" stroke="#C2BFD0" stroke-width="1.5" fill="none" opacity="0.85"/>
 <text x="557.2285714285714" y="167" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~250 mA</text>
-<text x="32" y="228" font-size="18" fill="#EEECF4" font-weight="600">First suspend-to-RAM test<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">USB and Wi-Fi on</tspan></text>
+<text x="32" y="228" font-size="18" fill="#EEECF4" font-weight="600">First suspend-to-RAM test<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">USB and Wi-Fi radio left powered</tspan></text>
 <rect x="32" y="242" width="213.0" height="30" rx="4" fill="#7A7690"/>
 <path d="M209.5 257H280.5M209.5 250V264M280.5 250V264" stroke="#C2BFD0" stroke-width="1.5" fill="none" opacity="0.85"/>
 <text x="292.5" y="263" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~105 mA</text>
 <text x="32" y="324" font-size="18" fill="#EEECF4" font-weight="600">0.4.0 configuration<tspan dx="10" font-size="15" font-weight="400" fill="#A3A0B3">USB and Wi-Fi off</tspan></text>
-<rect x="32" y="338" width="142.0" height="30" rx="4" fill="#8B7CF6"/>
+<rect x="32" y="338" width="142.0" height="30" rx="4" fill="#6A60A8"/>
 <path d="M173.2 353H185.0M173.2 346V360M185.0 346V360" stroke="#C2BFD0" stroke-width="1.5" fill="none" opacity="0.85"/>
 <text x="196.95428571428573" y="359" font-size="18" fill="#EEECF4" font-weight="650" text-anchor="start">~70 mA</text>
 <rect x="452" y="290" width="236" height="90" rx="10" fill="#221F33" stroke="#8B7CF6" stroke-width="1.5"/>
