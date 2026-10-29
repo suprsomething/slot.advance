@@ -150,10 +150,6 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
 }
 .blocks i.range { background: color-mix(in srgb, var(--c) 45%, transparent); }
 .blocks i.part { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 45%, transparent) var(--p), color-mix(in srgb, var(--c) 15%, transparent) var(--p)); }
-.wake-row { display: grid; grid-template-columns: 3.2rem 1fr; align-items: center; gap: 0.75rem; text-align: left; }
-.wake-row .row-name { font-family: var(--mono); font-size: 1rem; }
-.wake-bar { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
-.wake-bar i { display: block; height: 1.6rem; width: var(--w); background: var(--c); border-radius: 3px; }
 .rate { font-weight: 700; font-size: 1.1rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .note { margin: 0; color: var(--muted); font-size: 0.85rem; line-height: 1.5; text-align: center; }
 .note a { text-decoration-color: var(--dim); text-underline-offset: 3px; }
@@ -197,31 +193,15 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
 
   <div class="video" id="video">
     <video controls playsinline preload="metadata" poster="video-poster-0.5.0.jpg" width="1920" height="1080" aria-label="slot.advance 0.5.0: real sleep, now connected">
-      <source src="slot-advance-0.5.0.mp4" type="video/mp4">
-      <a href="slot-advance-0.5.0.mp4">Download the slot.advance 0.5.0 video</a>
+      <source src="slot-advance-0.5.0-r2.mp4" type="video/mp4">
+      <a href="slot-advance-0.5.0-r2.mp4">Download the slot.advance 0.5.0 video</a>
     </video>
   </div>
 
   <section class="battery">
-    <h2><i class="mark" style="--c:var(--s1)" aria-hidden="true"></i>Open and continue</h2>
-    <p>Close the lid and the RG SP genuinely sleeps. Open it and your game carries on from the same moment.</p>
-    <p class="headline"><strong>35% less resume time</strong> from 0.4.0 to 0.4.1, with Wi-Fi off.</p>
-    <div class="chart" role="group" aria-label="Median time from the kernel's first logged resume marker to the game's first rendered frame, Wi-Fi off: 1.25 seconds on 0.4.0, 0.81 seconds on 0.4.1, timed as 0.4.1-beta.1">
-      <div class="wake-row">
-        <span class="row-name">0.4.0</span>
-        <span class="wake-bar"><i style="--c:var(--dim); --w:calc((100% - 4rem) * 1)" aria-hidden="true"></i><span class="rate">1.25 s</span></span>
-      </div>
-      <div class="wake-row">
-        <span class="row-name">0.4.1</span>
-        <span class="wake-bar"><i style="--c:var(--s1); --w:calc((100% - 4rem) * 0.646)" aria-hidden="true"></i><span class="rate">0.81 s</span></span>
-      </div>
-      <p class="note">Median with Wi-Fi off, from the kernel's first logged resume marker to the first rendered frame. Excludes the unlogged moment the lid starts to open; not the kernel's total device-resume time. Timed on 0.4.1-beta.1, the same runtime source as 0.4.1. With 0.5.0's Wi-Fi On, the game resumes first and Wi-Fi reconnects in the background.</p>
-    </div>
-  </section>
-
-  <section class="battery">
-    <h2><i class="mark" style="--c:var(--s2)" aria-hidden="true"></i>Lower standby drain</h2>
-    <p class="headline"><strong>About 2 to 3.2% an hour asleep</strong>, down from about 7%, and 2% an hour in both 8-hour sleeps on a 0.5.0 test build.</p>
+    <h2><i class="mark" style="--c:var(--s1)" aria-hidden="true"></i>Real sleep, lower standby drain</h2>
+    <p>Close the lid and your RG SP genuinely sleeps, with your game held in memory. Open it and carry on straight away, with nothing reloaded.</p>
+    <p class="headline">In two separate 8-hour tests on a 0.5.0 test build, it used <strong>about 2% of the battery an hour</strong>, with Wi-Fi off or on.</p>
     <div class="chart chart-pair" role="group" aria-label="Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi off, and 2% an hour for 0.5.0 hardware sleep in one 8-hour sleep each with Wi-Fi off and Wi-Fi on">
       <div class="row">
         <div class="row-top">
@@ -263,7 +243,7 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
           <span class="rate">~2% an hour</span>
         </div>
       </div>
-      <p class="note">Each block is 1% an hour on the battery gauge. ~7%: a modified 0.3.0 test build held in software standby (ordinary 0.3.0 shuts down after 3 minutes). ~2 to 3.2%: three extended sleeps on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1. 0.5.0: one 8-hour sleep each on a 0.5.0 test build; the same reading doesn't show identical standby use with Wi-Fi off and on. Observed readings, not guaranteed battery life or one controlled comparison.</p>
+      <p class="note">Each block is 1% an hour on the battery gauge. ~7%: a modified 0.3.0 test build held in software standby (ordinary 0.3.0 shuts down after 3 minutes). ~2 to 3.2%: three extended sleeps on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1. 0.5.0: the same reading with Wi-Fi off and on doesn't show identical standby use. Observed readings, not guaranteed battery life or one controlled comparison.</p>
       <p class="note"><a href="https://github.com/suprsomething/slot.advance/blob/main/documentation/sleep-and-battery.md">How it was measured</a></p>
     </div>
   </section>
