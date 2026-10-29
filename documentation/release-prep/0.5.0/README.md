@@ -3,7 +3,7 @@
 > [!NOTE]
 > **Archived record.** slot.advance 0.5.0 was released on 29 October 2026: tag `advance-0.5.0` on `dc18e14`, published as [slot.advance 0.5.0](https://github.com/suprsomething/slot.advance/releases/tag/advance-0.5.0), and merged into `main` by PR #19. The notes below are kept as written at Checkpoint E, before publication, so statements such as "nothing tagged" describe that moment, not the current state. Two steps differed from the checklist: the tag could not be pushed from the preparation session, so the release workflow was run by hand on `release-0.5.0` with `release_tag` `advance-0.5.0`; and `main` was merged after publication, as planned. For current documentation, see the [User guide](../../user-guide.md) and [release notes](../../release-notes.md).
 
-*Working notes for the `docs/0.5.0-release-prep` branch. Not user documentation.*
+*Working notes for the `docs/0.5.0-release-prep` branch. Not user documentation. Remove this folder before merging into `main`, or keep it as a record.*
 
 **Status (Checkpoint E, 29 October 2026):** documentation final against `release-0.5.0` at `269faad`, which is merged into this branch. Nothing tagged, released, deployed or published. Every `RELEASE-PREP` marker is resolved.
 

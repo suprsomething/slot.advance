@@ -51,7 +51,7 @@ slot.advance is a fork of **[slot](https://github.com/BrandonKowalski/slot)** by
 
 Close the lid and your game is saved and held in memory. Open it to carry on. If the sleep time you choose in **Settings > Sleep** (3 minutes to 8 hours) runs out first, it shuts down cleanly and restores the game at the next power-on.
 
-Hardware sleep used about 2 to 3.2% of the battery an hour in three extended sleeps on 0.4.x, against roughly 7% for an earlier software-standby test build. On a 0.5.0 test build, an 8-hour sleep read 2% an hour with Wi-Fi off, and another 2% an hour with Wi-Fi on.
+Hardware sleep used about 2 to 3.2% of the battery an hour in three extended sleeps on 0.4.x with Wi-Fi off, against roughly 7% for an earlier software-standby test build (ordinary 0.3.0 shuts down after three minutes). On a 0.5.0 test build, an 8-hour sleep read 2% an hour with Wi-Fi off, and another 2% an hour with Wi-Fi on.
 
 <p align="center">
 <img src=".github/resources/battery/battery-drain-hourly.svg" width="100%" alt="Battery used per hour with the lid closed, as 1% blocks from observed battery-gauge drops: about 7% for 0.3.0 (semi-stock) software standby, a modified test build held in standby (61% to 47% in 2 hours); about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi Off from three extended sleeps; and 2% an hour for 0.5.0 hardware sleep in one 8-hour sleep each on a 0.5.0 test build, with Wi-Fi Off (77% to 61%) and with Wi-Fi On (80% to 64%)">

@@ -238,7 +238,7 @@ def current():
     return card(566, "\n".join(body),
                 "Estimated lid-closed current draw: about 250 mA for 0.3.0 (semi-stock) software standby, 105 mA for the first suspend-to-RAM test, 70 mA for the 0.4.0 configuration",
                 "Horizontal bar chart of currents calculated from battery-gauge readings, one run each. 0.3.0 (semi-stock) software standby, a modified build held awake: "
-                "about 250 mA, bounded 248 to 253 by when each 1% tick fell. First suspend-to-RAM test (October 2026 development, before 0.4.0) with USB and the Wi-Fi radio left powered: about 105 mA, 87.5 to 122.5 from whole-percent gauge resolution. "
+                "about 250 mA, bounded 248 to 253 by when each 1% tick fell. First suspend-to-RAM test (10 October 2026, before 0.4.0; test-a-suspend-usb-wifi-on.txt) with USB and the Wi-Fi radio left powered: about 105 mA, 87.5 to 122.5 from whole-percent gauge resolution. "
                 "0.4.0 configuration, from a 1.5-hour run below 80% charge: about 70 mA, 69.6 to 75.4 from the awake current assumed in the correction method (240 to 260 mA). "
                 "None of the ranges is a confidence interval. The extended sleeps started above 80% charge, where the gauge's step size is not known, so they are not converted to a current. "
                 "About 72% less than software standby.")
