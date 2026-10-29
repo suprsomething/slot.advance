@@ -15,7 +15,7 @@
 > [!IMPORTANT]
 > **Supported device: Anbernic RG SP (2026) only**: the clamshell model with the 720 x 480 display. Not compatible with the older RG35XX SP. For that model or any other Anbernic device, use upstream [slot](https://github.com/BrandonKowalski/slot).
 
-**Latest release: [slot.advance 0.4.2](https://github.com/suprsomething/slot.advance/releases/latest)** · **[Download&nbsp;ZIP](https://github.com/suprsomething/slot.advance/releases/download/advance-0.4.2/slot.advance-0.4.2-rg-sp.zip)**
+**Latest release: [slot.advance 0.5.0](https://github.com/suprsomething/slot.advance/releases/latest)** · **[Download&nbsp;ZIP](https://github.com/suprsomething/slot.advance/releases/download/advance-0.5.0/slot.advance-0.5.0-rg-sp.zip)**
 
 [Install](#installing-and-updating) · [User guide](documentation/user-guide.md) · [Release notes](documentation/release-notes.md) · [Website](https://slotadvance.com)
 
@@ -24,37 +24,42 @@
 ## Features
 
 - **Real hardware sleep.** Close the lid and your game waits in memory.
-- **Fast resume.** Open the lid and you're back at the same moment, with nothing reloaded.
-- **Sleep for 3 minutes to 8 hours**, then a clean automatic shutdown that restores the game at the next power-on.
-- **All, Recents and Favourites** shelves, and a carousel that reopens on the last game played.
-- **Five save states per game** in a switcher with previews, and a delete that asks first.
-- **Per-game settings.** Each game remembers its shader, colour correction and fast-forward choices.
+- **Instant resume.** Open the lid and you're back at the same moment, with nothing reloaded.
+- **Super-efficient standby.** Hours of sleep for a few percent of the battery an hour, then a clean automatic shutdown that restores your game.
+- **Optional Wi-Fi, off by default.** Join a network from Settings only when you want it. Sleep still comes first.
+- **Syncthing built in.** Keep your Saves and States in step with your computer or home server, on your own network.
+- **In-game menu.** Tap `MENU` to pause for Resume, States, Settings and Exit Game, with shader and fast-forward settings for the game you're playing.
+- **Cartridge shelf, favourites and save states.** All, Recents and Favourites shelves, five save states per game, and a carousel that reopens on your last game.
 
 **How does it differ from slot?** [See the full comparison](documentation/user-guide.md#differences-from-slot).
 
-slot.advance is a fork of **[slot](https://github.com/BrandonKowalski/slot)** by **Brandon T. Kowalski**. The carousel, the cart shelf, the save-state switcher, link play and nearly everything else you see is his work. This fork shapes it for one way of playing: GBA games on the 720 x 480 RG SP (2026).
+slot.advance is a fork of **[slot](https://github.com/BrandonKowalski/slot)** by **Brandon T. Kowalski**. The carousel, the cart shelf, the save-state switcher, link play and nearly everything else you see is his work, and the in-game menu is adapted from his. This fork shapes it for one way of playing: GBA games on the 720 x 480 RG SP (2026).
 
 ## Screenshots
 
 <p align="center">
-<img src=".github/resources/screenshots/advance/all-unbound.png" width="48%" alt="The All shelf with Pokémon Unbound cartridge-label artwork and a gold favourite star">
-<img src=".github/resources/screenshots/advance/switcher-unbound.png" width="48%" alt="The save-state switcher showing Pokémon Unbound's Hall of Fame saved 9 minutes ago">
-<br><sub>The <b>All</b> shelf with a starred favourite (left), and the <b>save-state switcher</b> (right). Rendered by slot.advance's own drawing code with user-supplied Pokémon Unbound artwork.</sub>
+<img src=".github/resources/screenshots/advance/0.5.0/carousel-wifi.png" width="64%" alt="The All shelf with Pokémon Unbound cartridge-label artwork, a gold favourite star, and a Wi-Fi icon beside the clock">
+<br>
+<img src=".github/resources/screenshots/advance/0.5.0/in-game-menu.png" width="48%" alt="The in-game menu: Resume, States, Settings and Exit Game, with Resume selected">
+<img src=".github/resources/screenshots/advance/0.5.0/network-syncthing-on.png" width="48%" alt="The Network menu: Wi-Fi On, Networks, Syncthing On, Service Running and Web Interface, connected to an example network">
+<br><sub>The <b>carousel</b> (top), the <b>in-game menu</b> (left) and <b>Network</b> with Wi-Fi and Syncthing on (right). Rendered by slot.advance's own drawing code with user-supplied Pokémon Unbound artwork; the network details are invented examples.</sub>
 </p>
 
 ---
 
 ## Sleep and battery
 
-Close the lid and your game is saved and held in memory. Open it to carry on. If the sleep time runs out first, it shuts down cleanly and restores the game at the next power-on. Choose the time in **Settings > Sleep**, from 3 minutes to 8 hours.
+Close the lid and your game is saved and held in memory. Open it to carry on. If the sleep time you choose in **Settings > Sleep** (3 minutes to 8 hours) runs out first, it shuts down cleanly and restores the game at the next power-on.
 
-In three extended sleeps with Wi-Fi off (the default), hardware sleep used about 2 to 3.2% of the battery an hour, against roughly 7% an hour for an earlier software-standby test build held in standby for two hours. Ordinary 0.3.0 shuts down after three minutes.
+In three extended sleeps on 0.4.x with Wi-Fi off (the default), hardware sleep used about 2 to 3.2% of the battery an hour, against roughly 7% an hour for an earlier software-standby test build held in standby for two hours. Ordinary 0.3.0 shuts down after three minutes.
 
 <p align="center">
-<img src=".github/resources/battery/battery-drain-hourly.svg" width="100%" alt="Battery used per hour with the lid closed, as 1% blocks from observed battery-gauge drops: about 7% for 0.3.0 (semi-stock) software standby, a modified test build held in standby (61% to 47% in 2 hours), and about 2 to 3.2% for 0.4.x hardware sleep from three extended sleeps (98% to 82% in 8 hours on 0.4.0-beta.3, 94% to 74% in 7 hours 46 minutes on 0.4.0, 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1)">
+<img src=".github/resources/battery/battery-drain-hourly.svg" width="100%" alt="Battery used per hour with the lid closed, as 1% blocks from observed battery-gauge drops: about 7% for 0.3.0 (semi-stock) software standby, a modified test build held in standby (61% to 47% in 2 hours), and about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi Off from three extended sleeps (98% to 82% in 8 hours on 0.4.0-beta.3, 94% to 74% in 7 hours 46 minutes on 0.4.0, 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1)">
 </p>
 
-<sub>Observed battery-gauge readings over a small number of runs, not guaranteed battery life. [How it was measured, and how far the figures can be trusted](documentation/sleep-and-battery.md).</sub>
+**With Wi-Fi on**, slot.advance saves your game, then disconnects and takes Wi-Fi down before every sleep. 0.5.0 testing suggests sleep stays close to the Wi-Fi-off figures above, though the two haven't been measured side by side. Wi-Fi and Syncthing do use more battery while you play.
+
+<sub>Observed battery-gauge readings and estimates over a small number of runs, not guaranteed battery life. [How it was measured, the 0.5.0 Wi-Fi results, and how far the figures can be trusted](documentation/sleep-and-battery.md).</sub>
 
 ---
 
@@ -95,10 +100,13 @@ Going back to an earlier version is covered in the [User guide](documentation/us
 | `L2` / `R2` | Switch between All, Recents and Favourites |
 | `Y` | Add or remove a favourite |
 | Tap / hold `A` | Resume where you left off / start the game fresh |
-| Double tap `MENU` in game | Open the save-state switcher |
+| `MENU` on the carousel | Settings, including **Network** for Wi-Fi and Syncthing |
+| Tap `MENU` in game | The in-game menu: Resume, States, Settings, Exit Game |
+| Double tap `MENU` in game | Straight to the save-state switcher |
+| Hold `MENU` in game | Save and go back to the carousel |
 | Close the lid, or tap `POWER` | Save and sleep |
 
-Link play needs Wi-Fi, which is off by default. To use it, add the line `wifi=on` to `Config/slot.state` on the games card and restart.
+Wi-Fi is off by default. For Syncthing or link play, open **Settings > Network**, switch **Wi-Fi** on and restart when asked. [Wi-Fi and Syncthing](documentation/user-guide.md#wi-fi-and-networks).
 
 Every control and setting is in the **[User guide](documentation/user-guide.md)**.
 
@@ -107,6 +115,8 @@ Every control and setting is in the **[User guide](documentation/user-guide.md)*
 ## Help
 
 - **Screen still dark after a quick lid flick?** Close the lid and open it again. Your game carries on.
+- **Red "Can't write to SD card" band?** That game isn't being saved. Stop playing it and see [what to do](documentation/user-guide.md#when-a-save-cant-be-read).
+- **A synced save seems older than expected?** Look for a Syncthing conflict copy beside it. [Details](documentation/user-guide.md#file-times-and-conflict-copies).
 - **Found a bug?** Before you power on again, copy `slot.log` and `slot.log.1` from the games card, plus `crash/cores.log` and the newest `crash/slot-….log` if there is a `crash/` folder. The next start-up replaces the logs. Then [open an issue](https://github.com/suprsomething/slot.advance/issues/new/choose). The full steps, troubleshooting and known limitations are in the [User guide](documentation/user-guide.md#troubleshooting).
 
 ---
@@ -117,7 +127,7 @@ Every control and setting is in the **[User guide](documentation/user-guide.md)*
 
 **For developers:** [Technical reference](documentation/technical.md) · [Sleep and battery measurements](documentation/sleep-and-battery.md) · [Building](documentation/building.md)
 
-This build: **0.4.2** · [All releases](https://github.com/suprsomething/slot.advance/releases)
+This build: **0.5.0** · [All releases](https://github.com/suprsomething/slot.advance/releases)
 
 ---
 
@@ -131,9 +141,10 @@ slot.advance is free and open source. If you enjoy using it and would like to su
 
 ## Credits
 
-- **[slot](https://github.com/BrandonKowalski/slot)** by Brandon T. Kowalski: the frontend this fork is built on. The cart sounds are recordings of his childhood Game Boy.
+- **[slot](https://github.com/BrandonKowalski/slot)** by Brandon T. Kowalski: the frontend this fork is built on, including the design of the in-game menu adapted here. The cart sounds are recordings of his childhood Game Boy.
 - **slots** by **[ciscosweater](https://github.com/ciscosweater)**: the Recents category is adapted from this community fork of slot, and its favourites tab inspired ours.
 - **[mGBA](https://mgba.io)** by endrift and **[gpSP](https://github.com/libretro/gpsp)** through [libretro](https://www.libretro.com): the emulation. **[AGS-102](https://github.com/BrandonKowalski/AGS-102)**, a fork of [BaseOS](https://github.com/pvaibhav/BaseOS) by @pvaibhav: the operating system slot boots on.
+- **[Syncthing](https://syncthing.net)** (Mozilla Public License 2.0) by the Syncthing contributors: included unmodified for syncing Saves and States. Its licence and authors are in `System/licenses/`. Web interface passwords use the **[EFF Large Wordlist](https://www.eff.org/deeplinks/2016/07/new-wordlists-random-passphrases)** (CC BY 3.0 US).
 - **[Open Sans](https://github.com/googlefonts/opensans)** (SIL Open Font License) and **[Nerd Fonts](https://www.nerdfonts.com)** symbols by Ryan L McIntyre (MIT), including the favourite star. The LCD3x screen shader's panel mask is derived from **gigaherz's LCD3x** ([shader credits and licences](licenses/shaders.txt)).
 - The cartridge-label photographs in the [starter pack](artwork/gba-originals) are credited to their photographers in its README. Both slot and slot.advance were built with **Claude** (see [AI disclosure](#ai-disclosure)).
 
