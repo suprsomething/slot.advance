@@ -1,5 +1,8 @@
 # slot.advance 0.5.0: website and teaser brief
 
+> [!NOTE]
+> **Archived record**, written before the 0.5.0 release and kept as written. Its website suggestions were applied after release in the post-release refresh, and its teaser outline was superseded by the finished 0.5.0 teaser.
+
 *Release-preparation material for review. Nothing here has been applied to slotadvance.com, and the live site is unchanged. Remove this folder before merging into `main`, or keep it as a record; it is not linked from the user documentation.*
 
 The aim: tell existing and new players what 0.5.0 adds in a few seconds, without changing what slot.advance is. The lead stays the same: **Real Sleep. Instant Resume. Super-Efficient Standby.** Everything new is optional and sits under that.

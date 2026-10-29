@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>slot.advance</title>
-<meta name="description" content="Real sleep and instant resume for the Anbernic RG SP (2026). A Game Boy Advance focused build of the slot frontend.">
+<meta name="description" content="Real sleep and instant resume for the Anbernic RG SP (2026), with optional Wi-Fi and Syncthing. A Game Boy Advance focused build of the slot frontend.">
 <meta property="og:title" content="slot.advance">
 <meta property="og:description" content="Real Sleep. Instant Resume. A Game Boy Advance focused build of slot for the Anbernic RG SP (2026).">
 <meta property="og:image" content="https://slotadvance.com/og.jpg">
@@ -119,7 +119,7 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
   gap: 2.5rem 2.25rem;
 }
-.grid section { min-width: 0; }
+.grid section { min-width: 0; align-content: start; }
 .grid h2 { font-size: 1.15rem; }
 
 /* Battery chart */
@@ -139,7 +139,7 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
 .row-name small { color: var(--muted); font-weight: 400; font-size: 0.85rem; margin-left: 0.4rem; }
 .row-obs { font-family: var(--mono); font-size: 0.95rem; color: var(--muted); font-variant-numeric: tabular-nums; text-wrap: balance; }
 .row-obs span { white-space: nowrap; }
-/* Two comparison groups: a little more air between them than between a row's parts. */
+/* Comparison rows: a little more air between them than between a row's parts. */
 .chart-pair { gap: 1.9rem; }
 .row-bar { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.75rem; }
 .blocks { display: flex; gap: 0.25rem; }
@@ -196,16 +196,16 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
   </header>
 
   <div class="video" id="video">
-    <video controls playsinline preload="metadata" poster="video-poster.jpg" width="1920" height="1080" aria-label="Introducing slot.advance">
-      <source src="slot-advance.mp4" type="video/mp4">
-      <a href="slot-advance.mp4">Download the slot.advance video</a>
+    <video controls playsinline preload="metadata" poster="video-poster-0.5.0.jpg" width="1920" height="1080" aria-label="slot.advance 0.5.0: real sleep, now connected">
+      <source src="slot-advance-0.5.0.mp4" type="video/mp4">
+      <a href="slot-advance-0.5.0.mp4">Download the slot.advance 0.5.0 video</a>
     </video>
   </div>
 
   <section class="battery">
     <h2><i class="mark" style="--c:var(--s1)" aria-hidden="true"></i>Open and continue</h2>
     <p>Close the lid and the RG SP genuinely sleeps. Open it and your game carries on from the same moment.</p>
-    <p class="headline"><strong>35% less resume time</strong> in 0.4.1, with Wi-Fi off.</p>
+    <p class="headline"><strong>35% less resume time</strong> from 0.4.0 to 0.4.1, with Wi-Fi off.</p>
     <div class="chart" role="group" aria-label="Median time from the kernel's first logged resume marker to the game's first rendered frame, Wi-Fi off: 1.25 seconds on 0.4.0, 0.81 seconds on 0.4.1, timed as 0.4.1-beta.1">
       <div class="wake-row">
         <span class="row-name">0.4.0</span>
@@ -215,18 +215,18 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
         <span class="row-name">0.4.1</span>
         <span class="wake-bar"><i style="--c:var(--s1); --w:calc((100% - 4rem) * 0.646)" aria-hidden="true"></i><span class="rate">0.81 s</span></span>
       </div>
-      <p class="note">Median with Wi-Fi off, from the kernel's first logged resume marker to the first rendered frame. Excludes the unlogged moment the lid starts to open; not the kernel's total device-resume time. Timed on 0.4.1-beta.1, the same runtime source as 0.4.1. With Wi-Fi on, both take about 0.82 s.</p>
+      <p class="note">Median with Wi-Fi off, from the kernel's first logged resume marker to the first rendered frame. Excludes the unlogged moment the lid starts to open; not the kernel's total device-resume time. Timed on 0.4.1-beta.1, the same runtime source as 0.4.1. With 0.5.0's Wi-Fi On, the game resumes first and Wi-Fi reconnects in the background.</p>
     </div>
   </section>
 
   <section class="battery">
     <h2><i class="mark" style="--c:var(--s2)" aria-hidden="true"></i>Lower standby drain</h2>
-    <p class="headline"><strong>About 2 to 3.2% an hour asleep</strong>, down from about 7%.</p>
-    <div class="chart chart-pair" role="group" aria-label="Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep">
+    <p class="headline"><strong>About 2 to 3.2% an hour asleep</strong>, down from about 7%, and 2% an hour in both 8-hour sleeps on a 0.5.0 test build.</p>
+    <div class="chart chart-pair" role="group" aria-label="Battery used per hour with the lid closed: about 7% for 0.3.0 (semi-stock) software standby, about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi off, and 2% an hour for 0.5.0 hardware sleep in one 8-hour sleep each with Wi-Fi off and Wi-Fi on">
       <div class="row">
         <div class="row-top">
           <span class="row-name">0.3.0 (semi-stock) <small>software standby</small></span>
-          <span class="row-obs">61% → 47% over 2 hours</span>
+          <span class="row-obs">61% to 47% in 2 h</span>
         </div>
         <div class="row-bar">
           <span class="blocks" style="--c:var(--dim)" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
@@ -235,15 +235,35 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
       </div>
       <div class="row">
         <div class="row-top">
-          <span class="row-name">0.4.x <small>hardware sleep</small></span>
+          <span class="row-name">0.4.x <small>hardware sleep, Wi-Fi off</small></span>
           <span class="row-obs"><span>16% in 8 h ·</span> <span>20% in 7.8 h ·</span> <span>24% in 7.6 h</span></span>
         </div>
         <div class="row-bar">
-          <span class="blocks" style="--c:var(--s3)" aria-hidden="true"><i></i><i></i><i class="range"></i><i class="part" style="--p:20%"></i></span>
+          <span class="blocks" style="--c:var(--s2)" aria-hidden="true"><i></i><i></i><i class="range"></i><i class="part" style="--p:20%"></i></span>
           <span class="rate">~2 to 3.2% an hour</span>
         </div>
       </div>
-      <p class="note">Each block is 1% an hour on the battery gauge. ~7%: a modified 0.3.0 test build held in software standby (ordinary 0.3.0 shuts down after 3 minutes). ~2 to 3.2%: three extended sleeps on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1. Observed readings, not a guaranteed range or a controlled comparison between releases.</p>
+      <div class="row">
+        <div class="row-top">
+          <span class="row-name">0.5.0 <small>hardware sleep, Wi-Fi off</small></span>
+          <span class="row-obs">77% to 61% in 8 h</span>
+        </div>
+        <div class="row-bar">
+          <span class="blocks" style="--c:var(--s3)" aria-hidden="true"><i></i><i></i></span>
+          <span class="rate">~2% an hour</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="row-top">
+          <span class="row-name">0.5.0 <small>hardware sleep, Wi-Fi on</small></span>
+          <span class="row-obs">80% to 64% in 8 h</span>
+        </div>
+        <div class="row-bar">
+          <span class="blocks" style="--c:var(--s3)" aria-hidden="true"><i></i><i></i></span>
+          <span class="rate">~2% an hour</span>
+        </div>
+      </div>
+      <p class="note">Each block is 1% an hour on the battery gauge. ~7%: a modified 0.3.0 test build held in software standby (ordinary 0.3.0 shuts down after 3 minutes). ~2 to 3.2%: three extended sleeps on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1. 0.5.0: one 8-hour sleep each on a 0.5.0 test build; the same reading doesn't show identical standby use with Wi-Fi off and on. Observed readings, not guaranteed battery life or one controlled comparison.</p>
       <p class="note"><a href="https://github.com/suprsomething/slot.advance/blob/main/documentation/sleep-and-battery.md">How it was measured</a></p>
     </div>
   </section>
@@ -255,16 +275,24 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
 
   <div class="grid">
     <section>
-      <h2><i class="mark" style="--c:var(--s4)" aria-hidden="true"></i>Your games, within reach</h2>
+      <h2><i class="mark" style="--c:var(--s4)" aria-hidden="true"></i>Wi-Fi when you want it</h2>
+      <p>Off by default. Switch it on in Settings and restart, join with the on-screen keyboard, and it reconnects by itself after you open the lid.</p>
+    </section>
+    <section>
+      <h2><i class="mark" style="--c:var(--s5)" aria-hidden="true"></i>Your saves, in sync</h2>
+      <p>Built-in Syncthing keeps your Saves and States in step with a computer or home server on your own network, while the handheld is awake.</p>
+    </section>
+    <section>
+      <h2><i class="mark" style="--c:var(--s6)" aria-hidden="true"></i>Settings without leaving your game</h2>
+      <p>Tap MENU for Resume, States, Settings and Exit Game. Shader, colour correction, fast-forward speed and sound are remembered for each game.</p>
+    </section>
+    <section>
+      <h2><i class="mark" style="--c:var(--s1)" aria-hidden="true"></i>Your games, within reach</h2>
       <p>All, Recents and Favourites, and straight back to the last cartridge you played.</p>
     </section>
     <section>
-      <h2><i class="mark" style="--c:var(--s5)" aria-hidden="true"></i>Save states, simplified</h2>
+      <h2><i class="mark" style="--c:var(--s2)" aria-hidden="true"></i>Save states, simplified</h2>
       <p>Five per game, browsed visually, with a check before anything is deleted.</p>
-    </section>
-    <section>
-      <h2><i class="mark" style="--c:var(--s6)" aria-hidden="true"></i>Remembered per game</h2>
-      <p>Shader, colour correction, fast-forward speed and sound.</p>
     </section>
     <section>
       <h2><span class="stripes" aria-hidden="true"><i class="mark" style="--c:var(--s1)"></i><i class="mark" style="--c:var(--s2)"></i><i class="mark" style="--c:var(--s3)"></i><i class="mark" style="--c:var(--s4)"></i><i class="mark" style="--c:var(--s5)"></i><i class="mark" style="--c:var(--s6)"></i></span>Looks the part</h2>
