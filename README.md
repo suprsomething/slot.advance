@@ -24,14 +24,15 @@
 
 ## Features
 
+<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
+
 - **Real hardware sleep.** Close the lid and your game waits in memory.
 - **Instant resume.** Open the lid and you're back at the same moment, with nothing reloaded.
-- **Super-efficient standby.** About 2 to 3.2% of the battery an hour asleep, in extended tests with Wi-Fi off. Sleep for 3 minutes to 8 hours, then a clean automatic shutdown that restores the game at the next power-on.
-- **Optional Wi-Fi, off by default.** Turn it on in **Settings > Network** to join a network, set the clock from the internet or use link play. Before every sleep it disconnects and takes the Wi-Fi interface down.
-- **Syncthing built in.** Sync your **Saves** and **States** with another device running Syncthing on the same network, such as a computer or home server, set up from a browser.
-<!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
-- **In-game menu.** Tap `MENU` in a game for **Resume, States, Settings and Exit Game**, with the game paused. Shader, colour correction and fast-forward changes made there apply to that game.
-- **The cartridge shelf you know.** All, Recents and Favourites, five save states per game with previews, and a carousel that reopens on the last game played.
+- **Super-efficient standby.** Hours of sleep for a few percent of the battery an hour, then a clean automatic shutdown that restores your game.
+- **Optional Wi-Fi, off by default.** Join a network from Settings only when you want it. Sleep still comes first.
+- **Syncthing built in.** Keep your Saves and States in step with your computer or home server, on your own network.
+- **In-game menu.** Tap `MENU` to pause for Resume, States, Settings and Exit Game, with shader and fast-forward settings for the game you're playing.
+- **Cartridge shelf, favourites and save states.** All, Recents and Favourites shelves, five save states per game, and a carousel that reopens on your last game.
 
 **How does it differ from slot?** [See the full comparison](documentation/user-guide.md#differences-from-slot).
 
@@ -39,31 +40,20 @@ slot.advance is a fork of **[slot](https://github.com/BrandonKowalski/slot)** by
 
 ## Screenshots
 
-<p align="center">
-<img src=".github/resources/screenshots/advance/0.5.0/carousel-wifi.png" width="64%" alt="The All shelf with Pokémon Unbound cartridge-label artwork, a gold favourite star, and a Wi-Fi icon beside the clock">
-<br><sub>The <b>carousel</b>, with the Wi-Fi icon shown while Wi-Fi is on</sub>
-</p>
-
 <!-- RELEASE-PREP: in-game menu (phase3-in-game-menu, ff79174) not yet merged or device-checked; confirm before release. -->
 <p align="center">
+<img src=".github/resources/screenshots/advance/0.5.0/carousel-wifi.png" width="64%" alt="The All shelf with Pokémon Unbound cartridge-label artwork, a gold favourite star, and a Wi-Fi icon beside the clock">
+<br>
 <img src=".github/resources/screenshots/advance/0.5.0/in-game-menu.png" width="48%" alt="The in-game menu: Resume, States, Settings and Exit Game, with Resume selected">
-<img src=".github/resources/screenshots/advance/0.5.0/in-game-settings-screen.png" width="48%" alt="Settings opened from a GBA game: GBA Shader LCD3x, Color Correction On, Show Game Titles Off">
-<br><sub>The <b>in-game menu</b> (left), and <b>Settings</b> opened from a game, where the shader and colour correction apply to that game (right)</sub>
-</p>
-
-<p align="center">
 <img src=".github/resources/screenshots/advance/0.5.0/network-syncthing-on.png" width="48%" alt="The Network menu: Wi-Fi On, Networks, Syncthing On, Service Running and Web Interface, connected to an example network">
-<img src=".github/resources/screenshots/advance/0.5.0/syncthing-web-interface.png" width="48%" alt="The Web Interface screen: an https address on port 8384, the user slotadvance and an example five-word password">
-<br><sub>The <b>Network</b> menu with Wi-Fi and Syncthing on (left), and the <b>Web Interface</b> screen for setting up Syncthing from a browser (right)</sub>
+<br><sub>The <b>carousel</b> (top), the <b>in-game menu</b> (left) and <b>Network</b> with Wi-Fi and Syncthing on (right). Rendered by slot.advance's own drawing code with user-supplied Pokémon Unbound artwork; the network details are invented examples.</sub>
 </p>
-
-<sub>Rendered by slot.advance's own drawing code at the RG SP (2026)'s 720 x 480, with user-supplied Pokémon Unbound artwork. The network name, address and password are invented examples: each RG SP makes its own password.</sub>
 
 ---
 
 ## Sleep and battery
 
-Close the lid and your game is saved and held in memory. Open it to carry on. If the sleep time runs out first, it shuts down cleanly and restores the game at the next power-on. Choose the time in **Settings > Sleep**, from 3 minutes to 8 hours.
+Close the lid and your game is saved and held in memory. Open it to carry on. If the sleep time you choose in **Settings > Sleep** (3 minutes to 8 hours) runs out first, it shuts down cleanly and restores the game at the next power-on.
 
 In three extended sleeps on 0.4.x with Wi-Fi off (the default), hardware sleep used about 2 to 3.2% of the battery an hour, against roughly 7% an hour for an earlier software-standby test build held in standby for two hours. Ordinary 0.3.0 shuts down after three minutes.
 
@@ -71,9 +61,9 @@ In three extended sleeps on 0.4.x with Wi-Fi off (the default), hardware sleep u
 <img src=".github/resources/battery/battery-drain-hourly.svg" width="100%" alt="Battery used per hour with the lid closed, as 1% blocks from observed battery-gauge drops: about 7% for 0.3.0 (semi-stock) software standby, a modified test build held in standby (61% to 47% in 2 hours), and about 2 to 3.2% for 0.4.x hardware sleep with Wi-Fi Off from three extended sleeps (98% to 82% in 8 hours on 0.4.0-beta.3, 94% to 74% in 7 hours 46 minutes on 0.4.0, 99% to 75% in 7 hours 37 minutes on 0.4.1-beta.1)">
 </p>
 
-**With Wi-Fi on**, slot.advance disconnects and takes the Wi-Fi interface down before every sleep. In 0.5.0 development tests, two sleeps prepared this way were estimated at about 66 and 74 mA, close to the ~70 mA estimated for Wi-Fi off in earlier tests, and an 8-hour sleep with Wi-Fi on read 2% an hour on the battery gauge, as an 8-hour sleep with Wi-Fi off did on the same test build. That is close, not proof of identical standby use. While you play, Wi-Fi and Syncthing do cost more: about 13% more current in one test.
+**With Wi-Fi on**, slot.advance saves your game, then disconnects and takes Wi-Fi down before every sleep. 0.5.0 testing suggests sleep stays close to the Wi-Fi-off figures above, though the two haven't been measured side by side. Wi-Fi and Syncthing do use more battery while you play.
 
-<sub>Observed battery-gauge readings and estimates over a small number of runs, not guaranteed battery life. [How it was measured, and how far the figures can be trusted](documentation/sleep-and-battery.md).</sub>
+<sub>Observed battery-gauge readings and estimates over a small number of runs, not guaranteed battery life. [How it was measured, the 0.5.0 Wi-Fi results, and how far the figures can be trusted](documentation/sleep-and-battery.md).</sub>
 
 ---
 
@@ -122,7 +112,7 @@ Going back to an earlier version is covered in the [User guide](documentation/us
 | Hold `MENU` in game | Save and go back to the carousel |
 | Close the lid, or tap `POWER` | Save and sleep |
 
-Wi-Fi is off by default. To join a network, sync with Syncthing or use link play, open **Settings > Network**, switch **Wi-Fi** on and restart when asked. [How Wi-Fi and Syncthing work](documentation/user-guide.md#wi-fi-and-networks).
+Wi-Fi is off by default. For Syncthing or link play, open **Settings > Network**, switch **Wi-Fi** on and restart when asked. [Wi-Fi and Syncthing](documentation/user-guide.md#wi-fi-and-networks).
 
 Every control and setting is in the **[User guide](documentation/user-guide.md)**.
 
@@ -131,7 +121,7 @@ Every control and setting is in the **[User guide](documentation/user-guide.md)*
 ## Help
 
 - **Screen still dark after a quick lid flick?** Close the lid and open it again. Your game carries on.
-- **Synced a save and it seems older than expected?** Look for a Syncthing conflict copy beside it. [Details](documentation/user-guide.md#file-times-and-conflict-copies).
+- **A synced save seems older than expected?** Look for a Syncthing conflict copy beside it. [Details](documentation/user-guide.md#file-times-and-conflict-copies).
 - **Found a bug?** Before you power on again, copy `slot.log` and `slot.log.1` from the games card, plus `crash/cores.log` and the newest `crash/slot-….log` if there is a `crash/` folder. The next start-up replaces the logs. Then [open an issue](https://github.com/suprsomething/slot.advance/issues/new/choose). The full steps, troubleshooting and known limitations are in the [User guide](documentation/user-guide.md#troubleshooting).
 
 ---
