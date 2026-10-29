@@ -8,10 +8,11 @@ use slot::app::Phase;
 use slot::audio::{AudioSink, StubSink};
 use slot::core::{apply_core_options, open_core_for};
 use slot::emu::{CoreState, EmuHandle};
+use slot::persist::Snapshot;
 use slot::session::Session;
 use slot_input::{Btn, RawEvent};
 use slot_retro::{ButtonMask, LibretroCore, RetroCore};
-use slot_store::Core;
+use slot_store::{Core, Platform};
 
 fn rom(name: &str) -> PathBuf {
     let p = Path::new(env!("CARGO_TARGET_TMPDIR")).join(name);
@@ -268,5 +269,60 @@ fn on_mgba_an_mbc2_game_reading_its_save_ram_neither_crashes_nor_loses_the_write
         "the MBC2 game took the core down or lost its write ({}):\n{}",
         out.status,
         String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn on_mgba_a_zero_byte_resume_on_the_card_starts_the_game_instead_of_crashing() {
+    let _g = core_lock();
+    let Some(dylib) = common::vendored_core() else {
+        eprintln!("no vendored mGBA core, skipping");
+        return;
+    };
+    let d = common::tmp_root_with_real_carts(&["Emerald"]);
+    slot::persist::flush(
+        d.path(),
+        Platform::Gba,
+        Core::Mgba,
+        "Emerald",
+        Some(&[0xA5u8; 64]),
+        None,
+    )
+    .expect("write a resume");
+    let dir = d.path().join("States/GBA/mgba/Emerald");
+    let resume_file = std::fs::read_dir(&dir)
+        .expect("the states directory")
+        .map(|e| e.expect("entry").path())
+        .find(|p| p.file_stem().and_then(|s| s.to_str()) == Some("resume"))
+        .expect("flush wrote no resume file");
+    std::fs::write(&resume_file, []).expect("empty the resume");
+    let resume = slot::persist::read_resume(d.path(), Platform::Gba, Core::Mgba, "Emerald");
+    assert_eq!(
+        resume.as_deref(),
+        Some(&[][..]),
+        "the card's zero-byte resume did not reach the core, so this test proves nothing"
+    );
+
+    let core = open_core_for(d.path(), Core::Mgba, "auto", false, &[dylib]);
+    let emu = EmuHandle::spawn(
+        core,
+        d.path().join("Games/GBA/Emerald.gba"),
+        StubSink::new().ring(),
+        None,
+        resume,
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while emu.state() == CoreState::Loading {
+        assert!(Instant::now() < deadline, "the core never settled");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        emu.state(),
+        CoreState::Ready,
+        "the game did not start after the empty resume was refused"
+    );
+    assert!(
+        !emu.snapshot().resume_trusted(),
+        "the empty resume was taken as good, so the next save could overwrite it"
     );
 }
