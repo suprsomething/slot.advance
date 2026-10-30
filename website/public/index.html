@@ -3,12 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>slot.advance</title>
-<meta name="description" content="Real sleep and instant resume for the Anbernic RG SP (2026), with optional Wi-Fi and Syncthing. A Game Boy Advance focused build of the slot frontend.">
-<meta property="og:title" content="slot.advance">
-<meta property="og:description" content="Real Sleep. Instant Resume. A Game Boy Advance focused build of slot for the Anbernic RG SP (2026).">
-<meta property="og:image" content="https://slotadvance.com/og.jpg">
+<title>slot.advance | GBA frontend for the Anbernic RG SP (2026)</title>
+<meta name="description" content="Real sleep, instant resume and efficient standby for the Anbernic RG SP (2026). A Game Boy Advance frontend with optional Wi-Fi and Syncthing.">
+<link rel="canonical" href="https://slotadvance.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="slot.advance">
+<meta property="og:title" content="slot.advance | GBA frontend for the Anbernic RG SP (2026)">
+<meta property="og:description" content="Real Sleep. Instant Resume. Super-Efficient Standby. A Game Boy Advance frontend for the Anbernic RG SP (2026), with optional Wi-Fi and Syncthing.">
+<meta property="og:image" content="https://slotadvance.com/og-0.5.0.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The striped slot.advance logo beside an open Anbernic RG SP (2026) showing the same logo, with the lines: Real Sleep. Instant Resume. Super-Efficient Standby.">
 <meta property="og:url" content="https://slotadvance.com/">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#15141b">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -49,7 +56,7 @@ body {
   gap: clamp(2.75rem, 7vw, 4.5rem);
 }
 a { color: inherit; }
-a:focus-visible, .button:focus-visible { outline: 2px solid var(--s3); outline-offset: 3px; border-radius: 4px; }
+a:focus-visible, .button:focus-visible, .download:focus-visible { outline: 2px solid var(--s3); outline-offset: 3px; border-radius: 4px; }
 
 /* Hero */
 .hero { display: grid; gap: 1.5rem; justify-items: center; text-align: center; }
@@ -63,7 +70,7 @@ a:focus-visible, .button:focus-visible { outline: 2px solid var(--s3); outline-o
   letter-spacing: -0.01em;
   text-wrap: balance;
 }
-.device { margin: 0; color: var(--muted); font-size: 0.95rem; }
+.device { margin: 0; color: var(--muted); font-size: 0.95rem; text-wrap: balance; }
 
 /* Video */
 .video {
@@ -104,6 +111,24 @@ a:focus-visible, .button:focus-visible { outline: 2px solid var(--s3); outline-o
 .stripes .mark { width: 1.9rem; height: 0.8rem; }
 h2 .stripes { gap: 0.08rem; }
 h2 .stripes .mark { width: 0.85rem; height: 0.7rem; }
+
+/* Get it: one compact action under the video, a step lighter than the video and chart panels */
+.get { display: grid; gap: 0.75rem; justify-items: center; text-align: center; }
+.video + .get { margin-top: -1.25rem; }
+.download {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  padding: 0.75rem 1.25rem;
+  background: #25242f; color: var(--fg);
+  border: 1px solid #636075; border-radius: 8px;
+  font-weight: 500; text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.download:hover { border-color: var(--muted); background: #2c2b37; }
+.download svg { width: 1.1rem; height: 1.1rem; }
+.get-meta { margin: 0; color: var(--muted); font-size: 0.9rem; text-wrap: balance; }
+.get-meta a { color: var(--fg); text-decoration-color: var(--dim); text-underline-offset: 3px; }
+.get-meta a:hover { text-decoration-color: var(--fg); }
+.get-meta .sep { color: var(--dim); margin-inline: 0.35rem; }
 
 /* Features */
 section { display: grid; gap: 0.5rem; justify-items: center; text-align: center; }
@@ -179,7 +204,7 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
 .support h2 { font-size: 1.15rem; }
 .kofi { display: block; width: min(240px, 100%); line-height: 0; }
 .kofi img { display: block; width: 100%; height: auto; }
-@media (prefers-reduced-motion: reduce) { .button { transition: none; } .button:hover { transform: none; } }
+@media (prefers-reduced-motion: reduce) { .button, .download { transition: none; } .button:hover { transform: none; } }
 </style>
 </head>
 <body>
@@ -188,7 +213,7 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
   <header class="hero">
     <h1><img src="logo.png" width="1001" height="420" alt="slot.advance"></h1>
     <p class="tagline">Real Sleep. Instant Resume.<br>Super-Efficient Standby.</p>
-    <p class="device">For the Anbernic RG SP (2026).</p>
+    <p class="device">A Game Boy Advance frontend for the Anbernic RG&nbsp;SP&nbsp;(2026).</p>
   </header>
 
   <div class="video" id="video">
@@ -196,6 +221,14 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
       <source src="slot-advance-0.5.0-r3.mp4" type="video/mp4">
       <a href="slot-advance-0.5.0-r3.mp4">Download the slot.advance 0.5.0 video</a>
     </video>
+  </div>
+
+  <div class="get">
+    <a class="download" href="https://github.com/suprsomething/slot.advance/releases/latest">
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 13.5h11"/></svg>
+      Download slot.advance
+    </a>
+    <p class="get-meta"><a href="https://github.com/suprsomething/slot.advance#installing-and-updating">Installation guide</a><span class="sep" aria-hidden="true">·</span>RG&nbsp;SP&nbsp;(2026) only. Not compatible with the RG35XX&nbsp;SP.</p>
   </div>
 
   <section class="battery">
@@ -243,7 +276,7 @@ section > p { margin: 0 auto; color: var(--muted); max-width: 36rem; }
           <span class="rate">~2% an hour</span>
         </div>
       </div>
-      <p class="note">Each block is 1% an hour on the battery gauge. ~7%: a modified 0.3.0 test build held in software standby (ordinary 0.3.0 shuts down after 3 minutes). ~2 to 3.2%: three extended sleeps on 0.4.0-beta.3, 0.4.0 and 0.4.1-beta.1. 0.5.0: the same reading with Wi-Fi off and on doesn't show identical standby use. Observed readings, not guaranteed battery life or one controlled comparison.</p>
+      <p class="note">Each block is 1% an hour on the battery gauge. 0.3.0: a modified test build held in software standby (ordinary 0.3.0 shuts down after 3 minutes). 0.4.x: three extended sleeps. 0.5.0: matching readings with Wi-Fi off and on don't show identical standby use. Observed readings, not guaranteed battery life or one controlled comparison.</p>
       <p class="note"><a href="https://github.com/suprsomething/slot.advance/blob/main/documentation/sleep-and-battery.md">How it was measured</a></p>
     </div>
   </section>
